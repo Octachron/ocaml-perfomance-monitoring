@@ -66,10 +66,12 @@ let putenv_fmt key fmt =
 let pkg_dir ~switch ~pkg =
    uuid @@ (switch ^ "-" ^ pkg)
 
+let set_switch switch ppf = Fmt.pf ppf "eval $(opam env --set-switch --switch=%S)" switch
+
 let execute ~dir ~switch ~pkg =
   putenv_fmt "OCAMLPARAM" ",_,timings=1,dump-dir=%s" dir;
-  cmd "(eval $(opam env --set-switch --switch=%S)  && opam reinstall %s)"
-    switch pkg
+  putenv_fmt "OPAMJOBS" "1";
+  cmd "(%t && opam reinstall --yes %s)" (set_switch switch) pkg
 
 let rec is_prefix_until prefix s len pos =
   pos >= len ||
@@ -109,13 +111,29 @@ end
 
 module Ls = Stat(List_observable)
 
+let stable_average f l =
+  let _, s = List.fold_left (fun (n,mn) x ->  n + 1,  mn +. (f x -. mn) /. float (n + 1) ) (0, 0.) l in
+  s
+
+let average = stable_average Fun.id
+let variance average = stable_average (fun x -> let diff = x -. average in diff *. diff )
+
+let interval_average l =
+  let n = List.length l in
+  let mu = average l in
+  let sigma_2 = variance mu l in
+  let factor = (* should depend on the number of sample *) 2. in
+  let width = factor *. sqrt (sigma_2 /. float n) in
+  mu, width
+
+
 let read_result ~pkg ~dir stats =
   let files = Array.to_list @@ Sys.readdir dir in
   let read_file filename =
     if is_prefix ~prefix:"profile" (Filename.basename filename) then
       Some (Parse.profile (Filename.concat dir filename))
     else
-       None
+      None
   in
   let profiles = List.filter_map read_file files in
   List.fold_left (fun stat x -> Ls.add_list (typechecking_times pkg x) stat) stats profiles
@@ -126,23 +144,51 @@ let read_result ~pkg ~dir stats =
 
 let print times =
   M.iter (fun {pkg;subpart} times ->
-      Fmt.pr "%s/%s:%a@." pkg subpart Fmt.(Dump.list pp_times) times
+      let mu, width = interval_average (List.map (fun x -> x.typechecking) times) in
+      Fmt.pr "%s/%s:average:%g±%g(%a)@." pkg subpart mu width Fmt.(Dump.list pp_times) times
     )   times
 
-let sample ~pkg stats =
+
+let save filename times =
+  let chan = open_out filename in
+  let fmt = Format.formatter_of_out_channel chan in
+  M.iter (fun {pkg;subpart} times ->
+      let mu, width = interval_average (List.map (fun x -> x.typechecking) times) in
+      Fmt.pf fmt "%s:%s %g %g@." pkg subpart mu width
+    ) times;
+  Fmt.flush fmt ();
+  close_out chan
+
+
+
+let (<!>) n err =
+  if n = 0 then () else (err Fmt.stderr ; exit n)
+
+
+let sample ~switch ~pkg stats =
   let dir = pkg_dir ~switch:after ~pkg in
-  let return = execute ~switch:after ~pkg ~dir in
-  if return <> 0 then exit return
-  else
+  execute ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" pkg;
   let stats = read_result ~dir ~pkg stats in
   stats
 
-let rec multisample n ~pkg stats =
+let rec multisample n ~switch ~pkg stats =
   if n = 0 then stats else
-   multisample (n-1) ~pkg (sample ~pkg stats)
+   multisample (n-1) ~pkg ~switch (sample ~switch ~pkg stats)
 
-let remove_pkg pkg = cmd "opam remove --yes %s" pkg
+
+let remove_pkg ~switch pkg =
+  cmd "(%t && opam remove --yes %s)" (set_switch switch) pkg
+  <!> Format.dprintf "Failed to remove %S" pkg
+
+let pkg_line n ~switch pkgs stats =
+  List.iter (remove_pkg ~switch) (List.rev pkgs);
+  List.fold_left  (fun stats pkg ->
+      multisample n ~switch ~pkg stats
+    ) stats pkgs
 
 let () =
-  let stats = multisample 2 ~pkg:"dune" Ls.empty in
+  let line = [ "ocamlfind"; "num"; "zarith" ] in
+  let switch = after in
+  let stats = pkg_line ~switch 5 line Ls.empty in
+  save "basic.data"  stats;
   print stats
