@@ -149,12 +149,15 @@ let print times =
     )   times
 
 
+let epsilon = 1e-6
+
 let save filename times =
   let chan = open_out filename in
   let fmt = Format.formatter_of_out_channel chan in
   M.iter (fun {pkg;subpart} times ->
       let mu, width = interval_average (List.map (fun x -> x.typechecking) times) in
-      Fmt.pf fmt "%s:%s %g %g@." pkg subpart mu width
+      if mu +. width > epsilon then
+        Fmt.pf fmt "%s:%s %g %g@." pkg subpart mu width
     ) times;
   Fmt.flush fmt ();
   close_out chan
