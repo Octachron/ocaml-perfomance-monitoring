@@ -183,7 +183,8 @@ let save_entry proj fmt ref (({pkg;subpart}:Key.t) as key) times =
     let mu_t, width_t = interval_average times in
     if mu_b +. width_b > epsilon then
       let ratio = mu_t /. mu_ref in
-      let width_r = 2. *. (mu_t *. width_ref +. mu_ref *. width_t) /. (mu_ref ** 2. -. width_ref ** 2.) in
+      (* If width is small and both distributions are gaussians *)
+      let width_r = mu_t *. width_ref +. width_t *. mu_t  in
       Fmt.pf fmt "%s:%s %g %g %g %g@." pkg subpart mu_b width_b ratio width_r
 
 
