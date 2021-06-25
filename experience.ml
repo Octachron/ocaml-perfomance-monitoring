@@ -6,7 +6,7 @@ let after = "Octachron-ocaml-pr10337+dump-dir"
 
 let cmd fmt = Format.kasprintf Sys.command fmt
 
-let output_dir name = "/tmp/ocaml-profile-" ^ name
+let output_dir name = "/tmp/" ^ name
 
 let uuid name =
   let rec loop n =
@@ -58,8 +58,6 @@ module Stat(O:observable with type sample = times) = struct
   let add_list ls o = List.fold_left (fun acc x -> add x acc) o ls
 end
 
-
-
 let putenv_fmt key fmt =
   Format.kasprintf (Unix.putenv key) fmt
 
@@ -68,10 +66,16 @@ let pkg_dir ~switch ~pkg =
 
 let set_switch switch ppf = Fmt.pf ppf "eval $(opam env --set-switch --switch=%S)" switch
 
+let reinstall ~switch ~pkg =
+  cmd "(%t && opam reinstall --yes %s)" (set_switch switch) pkg
+
+let install ~switch ~pkg =
+  cmd "(%t && opam install --yes %s)" (set_switch switch) pkg
+
 let execute ~dir ~switch ~pkg =
   putenv_fmt "OCAMLPARAM" ",_,timings=1,dump-dir=%s" dir;
   putenv_fmt "OPAMJOBS" "1";
-  cmd "(%t && opam reinstall --yes %s)" (set_switch switch) pkg
+  reinstall ~switch ~pkg
 
 let rec is_prefix_until prefix s len pos =
   pos >= len ||
@@ -86,19 +90,6 @@ let is_prefix ~prefix s = is_prefix_until prefix s (String.length prefix) 0
 
 let pp_times ppf {typechecking; total} =
   Fmt.pf ppf "%.3gs/%.3gs" typechecking total
-
-(*
-
-let () =
-Fmt.pr "@[<v>Typechecking time:@ %a@]@."
-  Fmt.(l  ist ~sep:(fun ppf () -> Fmt.pf ppf "@ ") pp_time) times;
-
-
-let typing_total, full_total = List.fold_left (fun (tty, ttot) (_,ty,tot) ->
-      tty +. ty, ttot +. tot) (0.,0.) times
-  in
-  let concentration = List.fold_left (fun ct (_,ty,tot) -> max ct (ty /. tot) ) 0. times
-*)
 
 
 module List_observable = struct
@@ -164,9 +155,23 @@ let bootstrap_ratio_samples x y =
   let n = max (Array.length x) (Array.length y) in
   Array.to_list @@ Array.init n (fun _ -> bootstrap_ratio x y ())
 
+let print_raw_entry name ppf (key:Key.t) times =
+  let space ppf () = Fmt.pf ppf " " in
+  let pp_times ppf t = Fmt.pf ppf "%g %g" t.typechecking t.total in
+  let list = Fmt.(list ~sep:space pp_times) in
+  Fmt.pf ppf "%s %s %s %a@." name key.pkg key.subpart list times
 
-let save_entry fmt ref (({pkg;subpart}:Key.t) as key) times =
-  let proj = List.map (fun x -> x.typechecking) in
+let save_raw name stat =
+  let out = open_out ("raw_"^ name ^ ".data") in
+  let fmt = Format.formatter_of_out_channel out in
+  M.iter (print_raw_entry name fmt) stat;
+  close_out out
+
+
+let typechecking_proj = List.map (fun x -> x.typechecking)
+let nontypechecking_proj = List.map (fun x -> x.total -. x.typechecking)
+
+let save_entry proj fmt ref (({pkg;subpart}:Key.t) as key) times =
   match M.find key ref with
   | exception Not_found -> ()
   | ref_times ->
@@ -182,10 +187,10 @@ let save_entry fmt ref (({pkg;subpart}:Key.t) as key) times =
       Fmt.pf fmt "%s:%s %g %g %g %g@." pkg subpart mu_b width_b ratio width_r
 
 
-let save filename ~ref_times ~times =
+let save proj filename ~ref_times ~times =
   let chan = open_out filename in
   let fmt = Format.formatter_of_out_channel chan in
-  M.iter (save_entry fmt ref_times) times;
+  M.iter (save_entry proj fmt ref_times) times;
   Fmt.flush fmt ();
   close_out chan
 
@@ -196,7 +201,8 @@ let (<!>) n err =
 
 
 let sample ~switch ~pkg stats =
-  let dir = pkg_dir ~switch:after ~pkg in
+  let dir = pkg_dir ~switch ~pkg in
+  let () =  Sys.mkdir dir 0o777 in
   execute ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" pkg;
   let stats = read_result ~dir ~pkg stats in
   stats
@@ -216,14 +222,22 @@ let pkg_line n ~switch pkgs stats =
       multisample n ~switch ~pkg stats
     ) stats pkgs
 
+
+
+let context ~switches ~pkgs = List.iter (fun switch ->
+    List.iter (fun pkg -> install ~switch ~pkg <!> Format.dprintf "Installation failure: %s/%s" switch pkg) pkgs
+  ) switches
+
 let () =
-  let line = [ "ocamlfind"; "num"; "zarith"; "dune" ] in
+  let () = context ~switches:[before; after] ~pkgs:["dune"] in
+  let line = [ "ocamlfind"; "num"; "zarith"; "seq"; "containers" ] in
   let experiment switch =
-    let res = pkg_line ~switch 100 line Ls.empty in
-    print res;
+    let res = pkg_line ~switch 20 line Ls.empty in
+    print res; save_raw switch res;
     res
 
   in
   let ref_times = experiment before in
   let times = experiment after in
-  save "ratio.data"  ~ref_times ~times;
+  save typechecking_proj "ratio.data"  ~ref_times ~times;
+  save nontypechecking_proj "witness.data"  ~ref_times ~times;
