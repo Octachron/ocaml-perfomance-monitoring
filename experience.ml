@@ -150,15 +150,42 @@ let print times =
 
 
 let epsilon = 1e-6
+let() = Random.self_init ()
 
-let save filename times =
+
+let bootstrap array () =
+  array.(Random.int (Array.length array))
+
+let bootstrap_ratio x y () =
+  bootstrap x () /. bootstrap y ()
+
+let bootstrap_ratio_samples x y =
+  let x, y = Array.of_list x, Array.of_list y in
+  let n = max (Array.length x) (Array.length y) in
+  Array.to_list @@ Array.init n (fun _ -> bootstrap_ratio x y ())
+
+
+let save_entry fmt ref (({pkg;subpart}:Key.t) as key) times =
+  let proj = List.map (fun x -> x.typechecking) in
+  match M.find key ref with
+  | exception Not_found -> ()
+  | ref_times ->
+    let times = proj times in
+    let ref_times = proj ref_times in
+    let ratio_samples = bootstrap_ratio_samples times ref_times in
+    let mu_b, width_b = interval_average ratio_samples in
+    let mu_ref, width_ref = interval_average ref_times in
+    let mu_t, width_t = interval_average times in
+    if mu_b +. width_b > epsilon then
+      let ratio = mu_t /. mu_ref in
+      let width_r = 2. *. (mu_t *. width_ref +. mu_ref *. width_t) /. (mu_ref ** 2. -. width_ref ** 2.) in
+      Fmt.pf fmt "%s:%s %g %g %g %g@." pkg subpart mu_b width_b ratio width_r
+
+
+let save filename ~ref_times ~times =
   let chan = open_out filename in
   let fmt = Format.formatter_of_out_channel chan in
-  M.iter (fun {pkg;subpart} times ->
-      let mu, width = interval_average (List.map (fun x -> x.typechecking) times) in
-      if mu +. width > epsilon then
-        Fmt.pf fmt "%s:%s %g %g@." pkg subpart mu width
-    ) times;
+  M.iter (save_entry fmt ref_times) times;
   Fmt.flush fmt ();
   close_out chan
 
@@ -190,8 +217,13 @@ let pkg_line n ~switch pkgs stats =
     ) stats pkgs
 
 let () =
-  let line = [ "ocamlfind"; "num"; "zarith" ] in
-  let switch = after in
-  let stats = pkg_line ~switch 5 line Ls.empty in
-  save "basic.data"  stats;
-  print stats
+  let line = [ "ocamlfind"; "num"; "zarith"; "dune" ] in
+  let experiment switch =
+    let res = pkg_line ~switch 100 line Ls.empty in
+    print res;
+    res
+
+  in
+  let ref_times = experiment before in
+  let times = experiment after in
+  save "ratio.data"  ~ref_times ~times;
