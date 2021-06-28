@@ -177,15 +177,10 @@ let save_entry proj fmt ref (({pkg;subpart}:Key.t) as key) times =
   | ref_times ->
     let times = proj times in
     let ref_times = proj ref_times in
-    let ratio_samples = bootstrap_ratio_samples times ref_times in
-    let mu_b, width_b = interval_average ratio_samples in
     let mu_ref, width_ref = interval_average ref_times in
-    let mu_t, width_t = interval_average times in
-    if mu_b +. width_b > epsilon then
-      let ratio = mu_t /. mu_ref in
-      (* If width is small and both distributions are gaussians *)
-      let width_r = mu_t *. width_ref +. width_t *. mu_t  in
-      Fmt.pf fmt "%s:%s %g %g %g %g@." pkg subpart mu_b width_b ratio width_r
+    let mu, width = interval_average times in
+    if mu +. width > epsilon then
+      Fmt.pf fmt "%s:%s %g %g %g %g@." pkg subpart mu_ref width_ref mu width
 
 
 let save proj filename ~ref_times ~times =
@@ -231,9 +226,14 @@ let context ~switches ~pkgs = List.iter (fun switch ->
 
 let () =
   let () = context ~switches:[before; after] ~pkgs:["dune"] in
-  let line = [ "ocamlfind"; "num"; "zarith"; "seq"; "containers" ] in
+  let line =
+    [ "ocamlfind"; "num"; "zarith"; "seq"; "containers"; "coq"; "dune"; "re";
+      "ocamlbuild"; "uchar"; "topkg"; "uutf"; "tyxml";
+      "sexplib0"; "base"
+    ]
+  in
   let experiment switch =
-    let res = pkg_line ~switch 20 line Ls.empty in
+    let res = pkg_line ~switch 4 line Ls.empty in
     print res; save_raw switch res;
     res
 
