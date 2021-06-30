@@ -225,7 +225,7 @@ let context ~switches ~pkgs = List.iter (fun switch ->
   ) switches
 
 let () =
-  let () = context ~switches:[before; after] ~pkgs:["dune"] in
+  let () = context ~switches:[before; after] ~pkgs:[] in
   let line =
     [ "ocamlfind"; "num"; "zarith"; "seq"; "containers"; "coq"; "dune"; "re";
       "ocamlbuild"; "uchar"; "topkg"; "uutf"; "tyxml";
