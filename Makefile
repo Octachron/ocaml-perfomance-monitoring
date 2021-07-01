@@ -18,8 +18,8 @@ run:
 	cset shield --exec dune -- exec ./runner/runner.exe
 
 analyze:
-	dune exec ./runner/analyzer.exe
+	dune exec ./analyzer/analyzer.exe
 
 full:
 	dune exec ./runner/runner.exe
-	dune exec ./runner/analyzer.exe
+	dune exec ./analyzer/analyzer.exe

@@ -14,7 +14,7 @@ let read filename =
   let closed = ref false in
   let rec read () = if !closed then Seq.Nil else
       match input_line x with
-      | exception Not_found ->
+      | exception End_of_file ->
         close_in x; closed:=false;
         Seq.Nil
       | s -> Seq.Cons (scan_entry s, read)
