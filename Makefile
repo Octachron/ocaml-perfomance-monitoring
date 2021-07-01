@@ -15,7 +15,7 @@ clean:
 	dune clean
 
 run:
-	dune exec ./runner/runner.exe
+	cset shield --exec dune -- exec ./runner/runner.exe
 
 analyze:
 	dune exec ./runner/analyzer.exe
