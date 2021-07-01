@@ -1,4 +1,0 @@
-(executable
- (name experience)
- (libraries unix fmt)
-)
