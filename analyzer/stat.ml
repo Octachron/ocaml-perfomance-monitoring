@@ -38,9 +38,45 @@ end
 
 module Ls = Stat(List_observable)
 
-let stable_average f l =
-  let _, s = List.fold_left (fun (n,mn) x ->  n + 1,  mn +. (f x -. mn) /. float (n + 1) ) (0, 0.) l in
-  s
+
+module type Vec = sig
+  type t
+  val zero: t
+  val ( + ): t -> t -> t
+  val ( - ): t -> t -> t
+  val (  *. ): float -> t -> t
+  val (  /. ): t -> float -> t
+end
+
+
+module type Fold = sig
+  type 'a t
+  val fold: ('a -> 'b -> 'a) -> 'a -> 'b t -> 'a
+
+end
+
+module Stable_average(V:Vec)(C:Fold) = struct
+  let compute f c =
+    let _, s = C.fold (fun (n,mn) x ->
+        let n = n + 1 in
+        n, V.( mn + (f x - mn) /. float n )
+      ) (0, V.zero) c
+    in
+    s
+end
+
+module Float_as_vec = struct
+  let ( *. ) = ( *. )
+  let ( + ) = ( +. )
+  let ( - ) = ( -. )
+  let ( /. ) = ( /. )
+  let zero = 0.
+  type t = float
+end
+
+module Float_stable_average = Stable_average(Float_as_vec)(struct type 'a t = 'a List.t let fold = List.fold_left end)
+
+let stable_average = Float_stable_average.compute
 
 let average = stable_average Fun.id
 let variance average = stable_average (fun x -> let diff = x -. average in diff *. diff )
@@ -94,32 +130,140 @@ let save_raw name stat =
   M.iter (print_raw_entry name fmt) stat;
   close_out out
 
-let save_entry fmt pp_key ref key times =
-  match M.find key ref with
-  | exception Not_found -> ()
-  | ref_times ->
-    if List.length times > 1 &&  List.length ref_times > 1 then
-      begin
-        let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking) in
-        let ty = List.map (fun x -> x.Data.typechecking) in
-        let ty_ref = interval_average (ty ref_times) in
-        let ty = interval_average (ty times) in
-        let nonty_ref = interval_average (nonty ref_times) in
-        let nonty = interval_average (nonty times) in
-        if ty.center +. ty.width > epsilon then
+
+type 'a balanced_interval = { main:'a; ref:'a }
+
+let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking)
+let ty = List.map (fun x -> x.Data.typechecking)
+
+
+let simplify ref main = M.fold (fun key times m ->
+    match M.find key ref with
+    | exception Not_found -> m
+    | ref_times ->
+      if List.length times < 2 &&  List.length ref_times < 2 then
+        m
+      else
+
+        let ty =
+          { main = interval_average (ty times);
+            ref  = interval_average (ty ref_times)
+          }
+        in
+        let nonty = { ref = interval_average (nonty ref_times);
+                      main = interval_average (nonty times)
+                    }
+        in
+        if ty.main.center +. ty.main.width > epsilon then
+          M.add key (ty, nonty) m
+        else
+          m
+  ) main M.empty
+
+let save_entry fmt pp_key key (ty, nonty) =
           Fmt.pf fmt "%a %a %a %a %a@."
             pp_key key
-            pp_interval ty_ref
-            pp_interval ty
-            pp_interval nonty_ref
-            pp_interval nonty
-      end
+            pp_interval ty.ref
+            pp_interval ty.main
+            pp_interval nonty.ref
+            pp_interval nonty.main
 
 let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
 
-let save filename ~ref_times ~times =
+let save filename m =
   let chan = open_out filename in
   let fmt = Format.formatter_of_out_channel chan in
-  M.iter (save_entry fmt pp_full_key ref_times) times;
+  M.iter (save_entry fmt pp_full_key) m;
   Fmt.flush fmt ();
   close_out chan
+
+
+module type Convex_space = sig
+  type t
+  val compare: t -> t -> int
+  val distance: t -> t -> float
+  val isobarycenter: int -> t Seq.t -> t
+end
+
+module type Input_space = sig
+  type t
+  type target
+  val compare: t -> t -> int
+  val proj: t -> target
+end
+
+
+module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
+
+  module Points = Set.Make(P)
+  module Group = Set.Make(I)
+
+  type center_data = { center: P.t; points: Points.t; group: Group.t }
+
+  let add_point centers x =
+    let find_min point centers =
+      let _, candidate, _ =
+        Array.fold_left (fun (distance, candidate, current) x ->
+            let d = P.distance x.center point in
+            if d < distance then
+              (d,current, current+1)
+            else
+              (distance, candidate, current + 1)
+          ) (Float.infinity, 0, 0) centers
+      in
+      candidate
+    in
+    let y = I.proj x in
+    let m = find_min y centers in
+    let nearest = centers.(m) in
+    centers.(m) <- {
+      center = nearest.center;
+      points = Points.add y nearest.points;
+      group=Group.add x nearest.group
+    }
+
+  let init center = { center; points = Points.empty; group = Group.empty }
+
+  let update_centers iter centers =
+    iter (add_point centers);
+    Array.mapi (fun k x ->
+        let new_center = P.isobarycenter (Points.cardinal x.points) (Points.to_seq x.points) in
+        let dist = P.distance new_center x.center in
+        centers.(k) <- init new_center;
+        dist
+      )
+      centers
+
+  exception Convergence_failure
+
+  let rec fix_point fuel epsilon iter centers =
+    if fuel = 0 then raise Convergence_failure
+    else
+      let dists = update_centers iter centers in
+      if Array.for_all (fun d -> d < epsilon) dists then
+        centers
+      else
+        fix_point (fuel - 1) epsilon iter centers
+
+
+  let rand_choose_k n seq k =
+    let indices = Array.init k (fun _ -> Random.int n ) in
+    let () = Array.sort compare indices in
+    let rec search found k indices pos seq =
+      if k = Array.length indices then Array.of_list found
+      else
+        match seq () with
+        | Seq.Nil -> Array.of_list found
+        | Seq.Cons(x, seq) ->
+          if indices.(k) = pos then
+            search (init (I.proj x)::found) (k+1) indices (pos + 1) seq
+        else
+          search found k indices (pos + 1) seq
+    in
+    search [] 0 indices 0 seq
+
+  let compute ~k ~fuel epsilon n seq =
+    let centers = rand_choose_k n seq k in
+    fix_point fuel epsilon (fun f -> Seq.iter f seq) centers
+
+end

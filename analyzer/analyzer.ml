@@ -1,6 +1,3 @@
-let typechecking_proj = List.map (fun x -> x.Data.typechecking)
-let nontypechecking_proj = List.map (fun (x:Data.times) -> x.total -. x.typechecking)
-
 module Db = Map.Make(String)
 
 let read_log_entry db (x:Data.typechecking_stat) =
@@ -17,7 +14,8 @@ let read_log log_seq =
 let comparison ~before ~after db =
     let ref_times = Db.find before db in
     let times = Db.find after db in
-    Stat.save  "by_files.data"  ~ref_times ~times
+    let m = Stat.simplify ref_times times in
+    Stat.save  "by_files.data"  m
 
 let before = "Octachron-ocaml-before-pr10337+dump-dir"
 let after = "Octachron-ocaml-pr10337+dump-dir"
