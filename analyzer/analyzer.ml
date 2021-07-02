@@ -17,14 +17,13 @@ let read_log log_seq =
 let comparison ~before ~after db =
     let ref_times = Db.find before db in
     let times = Db.find after db in
-    Stat.save typechecking_proj "ratio.data"  ~ref_times ~times;
-    Stat.save nontypechecking_proj "witness.data"  ~ref_times ~times
+    Stat.save  "by_files.data"  ~ref_times ~times
 
 let before = "Octachron-ocaml-before-pr10337+dump-dir"
 let after = "Octachron-ocaml-pr10337+dump-dir"
 
 let () =
-  let log_name = "log" in
+  let log_name = "complex.log" in
   let log_seq = Log.read log_name in
   let log = read_log log_seq in
   comparison ~before ~after log

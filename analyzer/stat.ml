@@ -12,6 +12,10 @@ module Key = struct
 end
 
 module M = Map.Make(Key)
+module Pkg = Map.Make(String)
+
+
+
 module Stat(O:observable with type sample = Data.times) = struct
   let empty = M.empty
   let add {Data.switch=_; pkg;subpart;time;total_time} m =
@@ -41,18 +45,26 @@ let stable_average f l =
 let average = stable_average Fun.id
 let variance average = stable_average (fun x -> let diff = x -. average in diff *. diff )
 
+type interval = { center:float; width:float }
+
 let interval_average l =
   let n = List.length l in
   let mu = average l in
   let sigma_2 = variance mu l in
   let factor = (* should depend on the number of sample *) 2. in
   let width = factor *. sqrt (sigma_2 /. float n) in
-  mu, width
+  {center=mu; width}
+
+let pretty_interval ppf x =
+  Fmt.pf ppf "%g±%g" x.center x.width
+
+let pp_interval ppf x =
+  Fmt.pf ppf "%g %g" x.center x.width
 
 let print times =
   M.iter (fun {pkg;subpart} times ->
-      let mu, width = interval_average (List.map (fun x -> x.Data.typechecking) times) in
-      Fmt.pr "%s/%s:average:%g±%g(%a)@." pkg subpart mu width Fmt.(Dump.list Data.pp_times) times
+      let i = interval_average (List.map (fun x -> x.Data.typechecking) times) in
+      Fmt.pr "%s/%s:average:%a(%a)@." pkg subpart pretty_interval i Fmt.(Dump.list Data.pp_times) times
     )   times
 
 
@@ -82,21 +94,32 @@ let save_raw name stat =
   M.iter (print_raw_entry name fmt) stat;
   close_out out
 
-let save_entry proj fmt ref (({pkg;subpart}:Key.t) as key) times =
+let save_entry fmt pp_key ref key times =
   match M.find key ref with
   | exception Not_found -> ()
   | ref_times ->
-    let times = proj times in
-    let ref_times = proj ref_times in
-    let mu_ref, width_ref = interval_average ref_times in
-    let mu, width = interval_average times in
-    if mu +. width > epsilon then
-      Fmt.pf fmt "%s:%s %g %g %g %g@." pkg subpart mu_ref width_ref mu width
+    if List.length times > 1 &&  List.length ref_times > 1 then
+      begin
+        let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking) in
+        let ty = List.map (fun x -> x.Data.typechecking) in
+        let ty_ref = interval_average (ty ref_times) in
+        let ty = interval_average (ty times) in
+        let nonty_ref = interval_average (nonty ref_times) in
+        let nonty = interval_average (nonty times) in
+        if ty.center +. ty.width > epsilon then
+          Fmt.pf fmt "%a %a %a %a %a@."
+            pp_key key
+            pp_interval ty_ref
+            pp_interval ty
+            pp_interval nonty_ref
+            pp_interval nonty
+      end
 
+let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
 
-let save proj filename ~ref_times ~times =
+let save filename ~ref_times ~times =
   let chan = open_out filename in
   let fmt = Format.formatter_of_out_channel chan in
-  M.iter (save_entry proj fmt ref_times) times;
+  M.iter (save_entry fmt pp_full_key ref_times) times;
   Fmt.flush fmt ();
   close_out chan
