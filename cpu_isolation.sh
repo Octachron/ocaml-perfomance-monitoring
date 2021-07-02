@@ -17,3 +17,6 @@ sudo chmod og+rwX -R /dev/cpuset/user
 
 # tear down the shield
 # cset shield --reset
+
+# check running process
+# cset shield --shield -v
