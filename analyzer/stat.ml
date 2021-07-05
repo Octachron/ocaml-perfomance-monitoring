@@ -131,7 +131,7 @@ let save_raw name stat =
   close_out out
 
 
-type 'a balanced_interval = { main:'a; ref:'a }
+type 'a balanced = { main:'a; ref:'a }
 
 let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking)
 let ty = List.map (fun x -> x.Data.typechecking)
@@ -267,3 +267,35 @@ module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
     fix_point fuel epsilon (fun f -> Seq.iter f seq) centers
 
 end
+
+
+module Interval_as_vec = struct
+  type t = interval
+  let ( + ) x y = { center= x.center +. y.center; width = x.width +. y.width }
+  let ( - ) x y = { center = x.center -. y.center; width = x.width -. y.width }
+  let ( *. ) l x = { center = l *. x.center; width = l *. x.width }
+  let ( /. ) x l = { center = x.center /. l; width = x.width /. l }
+  let zero = { center = 0.; width = 0. }
+end
+
+module Balanced_as_vec(V:Vec) = struct
+  type t = V.t balanced
+  open V
+  let ( + ) x y = { main = x.main + y.main; ref = x.ref + y.ref }
+  let ( - ) x y = { main = x.main - y.main; ref = x.ref - y.ref }
+  let ( *. ) l x = { main = l *. x.main; ref = l *. x.ref }
+  let ( /. ) x l = { main = x.main /. l; ref = x.ref /. l }
+  let zero = { main = V.zero; ref = V.zero }
+end
+
+module Pair(X:Vec)(Y:Vec) = struct
+  type t = X.t * Y.t
+  let ( + ) (x,u) (y,v) = X.( x + y ), Y.(u + v)
+  let ( - ) (x,u) (y,v) = X.( x - y ), Y.(u - v)
+  let zero = X.zero, Y.zero
+  let ( *. ) l (x,y) = X.(l *. x), Y.(l *. y)
+  let ( /. ) l (x,y) = X.(x /. l), Y.(y/.l)
+end
+
+module Intervals = Balanced_as_vec(Interval_as_vec)
+module Pairs = Pair(Intervals)(Intervals)
