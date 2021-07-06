@@ -46,6 +46,9 @@ module type Vec = sig
   val ( - ): t -> t -> t
   val (  *. ): float -> t -> t
   val (  /. ): t -> float -> t
+  val ( |*| ): t -> t -> float
+  val compare: t -> t -> int
+  val pp: Format.formatter -> t -> unit
 end
 
 
@@ -56,13 +59,22 @@ module type Fold = sig
 end
 
 module Stable_average(V:Vec)(C:Fold) = struct
-  let compute f c =
+  let map_and_compute f c =
     let _, s = C.fold (fun (n,mn) x ->
         let n = n + 1 in
         n, V.( mn + (f x - mn) /. float n )
       ) (0, V.zero) c
     in
     s
+
+  let compute c =
+    let _, s = C.fold (fun (n,mn) x ->
+        let n = n + 1 in
+        n, V.( mn + (x - mn) /. float n )
+      ) (0, V.zero) c
+    in
+    s
+
 end
 
 module Float_as_vec = struct
@@ -70,16 +82,21 @@ module Float_as_vec = struct
   let ( + ) = ( +. )
   let ( - ) = ( -. )
   let ( /. ) = ( /. )
+  let (|*|) x y = x *. y
   let zero = 0.
   type t = float
+  let compare (x:t) (y:t) = Stdlib.compare x y
+  let pp = Fmt.float
 end
 
 module Float_stable_average = Stable_average(Float_as_vec)(struct type 'a t = 'a List.t let fold = List.fold_left end)
 
 let stable_average = Float_stable_average.compute
+let map_stable_average = Float_stable_average.map_and_compute
 
-let average = stable_average Fun.id
-let variance average = stable_average (fun x -> let diff = x -. average in diff *. diff )
+
+let average = stable_average
+let variance average = map_stable_average (fun x -> let diff = x -. average in diff *. diff )
 
 type interval = { center:float; width:float }
 
@@ -181,8 +198,9 @@ let save filename m =
 module type Convex_space = sig
   type t
   val compare: t -> t -> int
-  val distance: t -> t -> float
-  val isobarycenter: int -> t Seq.t -> t
+  val distance_2: t -> t -> float
+  val isobarycenter: t Seq.t -> t
+  val pp: Format.formatter -> t -> unit
 end
 
 module type Input_space = sig
@@ -204,7 +222,7 @@ module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
     let find_min point centers =
       let _, candidate, _ =
         Array.fold_left (fun (distance, candidate, current) x ->
-            let d = P.distance x.center point in
+            let d = P.distance_2 x.center point in
             if d < distance then
               (d,current, current+1)
             else
@@ -219,17 +237,21 @@ module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
     centers.(m) <- {
       center = nearest.center;
       points = Points.add y nearest.points;
-      group=Group.add x nearest.group
+      group= Group.add x nearest.group
     }
 
   let init center = { center; points = Points.empty; group = Group.empty }
 
-  let update_centers iter centers =
+  let update_centers iter epsilon centers =
     iter (add_point centers);
     Array.mapi (fun k x ->
-        let new_center = P.isobarycenter (Points.cardinal x.points) (Points.to_seq x.points) in
-        let dist = P.distance new_center x.center in
-        centers.(k) <- init new_center;
+        let new_center = P.isobarycenter (Points.to_seq x.points) in
+        let dist = P.distance_2 new_center x.center in
+        begin if dist > epsilon then
+          centers.(k) <- init new_center
+          else
+            centers.(k) <- { centers.(k) with center = new_center }
+        end;
         dist
       )
       centers
@@ -239,7 +261,7 @@ module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
   let rec fix_point fuel epsilon iter centers =
     if fuel = 0 then raise Convergence_failure
     else
-      let dists = update_centers iter centers in
+      let dists = update_centers iter epsilon centers in
       if Array.for_all (fun d -> d < epsilon) dists then
         centers
       else
@@ -247,7 +269,7 @@ module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
 
 
   let rand_choose_k n seq k =
-    let indices = Array.init k (fun _ -> Random.int n ) in
+    let indices = Array.init k (fun _ -> Random.int n) in
     let () = Array.sort compare indices in
     let rec search found k indices pos seq =
       if k = Array.length indices then Array.of_list found
@@ -262,7 +284,7 @@ module Kmeans(P:Convex_space)(I: Input_space with type target := P.t) = struct
     in
     search [] 0 indices 0 seq
 
-  let compute ~k ~fuel epsilon n seq =
+  let compute ~k ~fuel ~epsilon n seq =
     let centers = rand_choose_k n seq k in
     fix_point fuel epsilon (fun f -> Seq.iter f seq) centers
 
@@ -273,9 +295,12 @@ module Interval_as_vec = struct
   type t = interval
   let ( + ) x y = { center= x.center +. y.center; width = x.width +. y.width }
   let ( - ) x y = { center = x.center -. y.center; width = x.width -. y.width }
+  let (|*|) x y = x.center *. y.center +. x.width *. y.width
   let ( *. ) l x = { center = l *. x.center; width = l *. x.width }
   let ( /. ) x l = { center = x.center /. l; width = x.width /. l }
   let zero = { center = 0.; width = 0. }
+  let compare (x:t) (y:t) = Stdlib.compare x y
+  let pp = pretty_interval
 end
 
 module Balanced_as_vec(V:Vec) = struct
@@ -283,19 +308,56 @@ module Balanced_as_vec(V:Vec) = struct
   open V
   let ( + ) x y = { main = x.main + y.main; ref = x.ref + y.ref }
   let ( - ) x y = { main = x.main - y.main; ref = x.ref - y.ref }
+  let (|*|) x y = V.(x.main|*|y.main) +. V.(y.ref|*|y.ref)
   let ( *. ) l x = { main = l *. x.main; ref = l *. x.ref }
   let ( /. ) x l = { main = x.main /. l; ref = x.ref /. l }
   let zero = { main = V.zero; ref = V.zero }
+  let compare x y =
+    let res = V.compare x.main y.main in
+    if res = 0 then V.compare x.ref y.ref
+    else res
+  let pp ppf x = Fmt.pf ppf "%a(%a)" V.pp x.main V.pp x.ref
 end
 
 module Pair(X:Vec)(Y:Vec) = struct
   type t = X.t * Y.t
   let ( + ) (x,u) (y,v) = X.( x + y ), Y.(u + v)
   let ( - ) (x,u) (y,v) = X.( x - y ), Y.(u - v)
+  let (|*|) (x,u) (y,v) = X.(x|*|y) +. Y.(u|*|v)
   let zero = X.zero, Y.zero
   let ( *. ) l (x,y) = X.(l *. x), Y.(l *. y)
-  let ( /. ) l (x,y) = X.(x /. l), Y.(y/.l)
+  let ( /. ) (x,y) l = X.(x /. l), Y.(y/.l)
+  let compare (x1,y1) (x2,y2) =
+    let res = X.compare x1 x2 in
+    if res = 0 then Y.compare y1 y2
+    else res
+  let pp ppf (x,y) = Fmt.pf ppf "(%a,%a)" X.pp x Y.pp y
+end
+
+module R3 = struct
+  type scalar = float
+  type t = {x:scalar; y:scalar; z:scalar}
+  let ( + ) u v= { x=u.x +. v.x; y = u.y +. v.y; z = u.z +. v.z }
+  let ( - ) u v= { x=u.x -. v.x; y = u.y -. v.y; z = u.z -. v.z }
+  let zero = { x =0.; y = 0.; z = 0. }
+  let (|*|) u v = u.x *. v.x +. u.y *. v.y +. u.z *. v.z
+  let ( *. ) l u = { x = l *. u.x; y = l *. u.y; z = l *. u.z }
+  let ( /.  ) u l = { x = u.x /. l; y = u.y /. l; z = u.z /. l }
+  let compare (x:t) (y:t) = Stdlib.compare x y
+  let pp ppf v = Fmt.pf ppf "(%g %g %g)" v.x v.y v.z
 end
 
 module Intervals = Balanced_as_vec(Interval_as_vec)
 module Pairs = Pair(Intervals)(Intervals)
+
+module Convex_from_vec(V:Vec) = struct
+  include V
+  let distance_2 x y =
+    let d = V.(x - y) in
+    V.(d|*|d)
+  module Stable = Stable_average(V)(struct
+      type 'a t = 'a Seq.t
+      let fold = Seq.fold_left
+    end)
+  let isobarycenter = Stable.compute
+end
