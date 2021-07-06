@@ -24,6 +24,7 @@ module Input = struct
     }
 end
 module Kmean = Stat.Kmeans(C)(Input)
+module Seq_average=Stat.Stable_average(Stat.Float_as_vec)(struct type 'a t = 'a Seq.t let fold = Seq.fold_left end)
 
 let comparison ~before ~after db =
     let ref_times = Db.find before db in
@@ -33,10 +34,30 @@ let comparison ~before ~after db =
 let before = "Octachron-ocaml-before-pr10337+dump-dir"
 let after = "Octachron-ocaml-pr10337+dump-dir"
 
+
+let split n l =
+  let rec split left n right =
+  if n = 0 then left, right else
+    match right with
+    | [] -> left, right
+    | a :: right -> split (a::left) (n-1) right
+  in
+  split [] n l
+
+let reject_outliers proj q abs l =
+  let l = List.sort (fun x y -> compare (proj x) (proj y)) l in
+  let n = List.length l in
+  let excl = max abs @@ int_of_float (float n *. q) in
+  let _ ,r = split excl l in
+  let l, _ = split (n- 2 * excl) r in
+  l
+
 let () =
   let log_name = "longer_complex.log" in
   let log_seq = Log.read log_name in
   let log = read_log log_seq in
+  let pre l = reject_outliers (fun (x:Data.times) -> x.typechecking) 0.1 1 l in
+  let log = Db.map (Stat.M.map pre) log in
   let m = comparison ~before ~after log in
   let epsilon = 1e-6 in
   Stat.save  "by_files.data" m;
@@ -61,4 +82,27 @@ let () =
     Stat.save name data
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
-  Array.iteri split_and_save groups
+  Array.iteri split_and_save groups;
+
+  let h = Stat.histogram 100 Input.proj (Array.of_seq @@ Stat.M.to_seq m) in
+  let proj (_,(ty,_) : Input.t) =  ty.main.center /. ty.ref.center in
+  let antiproj (_,(_, nonty) : Input.t) =  nonty.main.center /. nonty.ref.center in
+  Stat.save_histogram "hist.data" proj h;
+  Stat.save_quantiles "quantiles.data" proj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_histogram "antihist.data" antiproj h;
+  Stat.save_quantiles "antiquantiles.data" antiproj (Array.of_seq @@ Stat.M.to_seq m);
+  let average = Seq_average.map_and_compute proj (Stat.M.to_seq m) in
+  let anti_average = Seq_average.map_and_compute antiproj (Stat.M.to_seq m) in
+  let log_average = exp @@ Seq_average.map_and_compute (fun x -> Float.log @@ proj x) (Stat.M.to_seq m) in
+  let log_anti_average = exp @@ Seq_average.map_and_compute
+      (fun x -> if antiproj x <= 0. then 0. else Float.log @@ antiproj x) (Stat.M.to_seq m) in
+  Fmt.pr
+    "@[<v>average: %g@ \
+     non typechecking average: %g@ \
+     exp (E (log Ty)): %g@ \
+     exp (E (log Nonty)): %g
+@]@."
+    average
+    anti_average
+    log_average
+    log_anti_average

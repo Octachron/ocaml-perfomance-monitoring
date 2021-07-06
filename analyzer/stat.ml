@@ -141,11 +141,17 @@ let print_raw_entry name ppf (key:Key.t) times =
   let list = Fmt.(list ~sep:space Data.pp_times) in
   Fmt.pf ppf "%s %s %s %a@." name key.pkg key.subpart list times
 
+let to_filename filename f =
+  let chan = open_out filename in
+  let fmt = Format.formatter_of_out_channel chan in
+  f fmt;
+  Fmt.flush fmt ();
+  close_out chan
+
+
 let save_raw name stat =
-  let out = open_out ("raw_"^ name ^ ".data") in
-  let fmt = Format.formatter_of_out_channel out in
-  M.iter (print_raw_entry name fmt) stat;
-  close_out out
+  let name ="raw_"^ name ^ ".data" in
+  to_filename name (fun fmt -> M.iter (print_raw_entry name fmt) stat)
 
 
 type 'a balanced = { main:'a; ref:'a }
@@ -187,13 +193,10 @@ let save_entry fmt pp_key key (ty, nonty) =
 
 let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
 
-let save filename m =
-  let chan = open_out filename in
-  let fmt = Format.formatter_of_out_channel chan in
-  M.iter (save_entry fmt pp_full_key) m;
-  Fmt.flush fmt ();
-  close_out chan
 
+let save filename m = to_filename filename (fun fmt ->
+    M.iter (save_entry fmt pp_full_key) m
+  )
 
 module type Convex_space = sig
   type t
@@ -361,3 +364,42 @@ module Convex_from_vec(V:Vec) = struct
     end)
   let isobarycenter = Stable.compute
 end
+
+
+let quantiles proj all ppf =
+  let () = Array.sort (fun x y -> compare (proj x) (proj y)) all in
+  let n = Array.length all in
+  let quantile i = proj all.( int_of_float @@ i *. float n  ) in
+  Fmt.pr "Quantiles: 1%% :%g; 10%%: %g -> 25%%: %g -> 50%%: %g -> 75%%: %g -> 90%%: %g -> 99%%: %g -> 99.9%%: %g @."
+    (quantile 0.01)
+    (quantile 0.1)
+    (quantile 0.25)
+    (quantile 0.5)
+    (quantile 0.75)
+    (quantile 0.9)
+    (quantile 0.99)
+    (quantile 0.999)
+  ;
+  Array.iteri (fun i x -> Fmt.pf ppf "%g %g@." (proj x) ((100. *. float i) /. float n)) all
+
+let histogram nbins proj all =
+  let () = Array.sort (fun x y -> compare (proj x) (proj y)) all in
+  let npoints = Array.length all in
+  let size =  npoints / nbins in
+  let rest = npoints - nbins * size in
+  let sizes = Array.init (nbins + 1) (fun i -> if i = 0 then 0 else if i < rest then size + 1 else size) in
+  let () = Array.iteri (fun i x -> if i > 0 then sizes.(i) <- x + sizes.(i-1)) sizes in
+  Array.init nbins (fun n -> Array.sub all sizes.(n) (sizes.(n+1)-sizes.(n)))
+
+let pp_histogram proj h ppf =
+  let print_cell ppf a =
+    let min = proj a.(0) in
+    let max = proj a.(Array.length a - 1) in
+    let s = Array.length a in
+    let density = float s /.  (max -. min) in
+    Fmt.pf ppf "%g %g %g@."  min max density
+  in
+  Array.iter (print_cell ppf) h
+
+ let save_histogram name proj h = to_filename name (pp_histogram proj h)
+ let save_quantiles name proj all = to_filename name (quantiles proj all)
