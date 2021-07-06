@@ -83,13 +83,13 @@ let () =
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
   Array.iteri split_and_save groups;
-
-  let h = Stat.histogram 100 Input.proj (Array.of_seq @@ Stat.M.to_seq m) in
   let proj (_,(ty,_) : Input.t) =  ty.main.center /. ty.ref.center in
   let antiproj (_,(_, nonty) : Input.t) =  nonty.main.center /. nonty.ref.center in
+  let h = Stat.histogram 20 proj (Array.of_seq @@ Stat.M.to_seq m) in
+  let antih = Stat.histogram 20 antiproj (Array.of_seq @@ Stat.M.to_seq m) in
   Stat.save_histogram "hist.data" proj h;
   Stat.save_quantiles "quantiles.data" proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_histogram "antihist.data" antiproj h;
+  Stat.save_histogram "antihist.data" antiproj antih;
   Stat.save_quantiles "antiquantiles.data" antiproj (Array.of_seq @@ Stat.M.to_seq m);
   let average = Seq_average.map_and_compute proj (Stat.M.to_seq m) in
   let anti_average = Seq_average.map_and_compute antiproj (Stat.M.to_seq m) in
