@@ -397,6 +397,7 @@ let pp_histogram proj h ppf =
     let max = proj a.(Array.length a - 1) in
     let s = Array.length a in
     let density = float s /.  (max -. min) in
+    let density = if density > Float.max_float then Float.max_float /. 100. else density in
     Fmt.pf ppf "%g %g %g@."  min max density
   in
   Array.iter (print_cell ppf) h
