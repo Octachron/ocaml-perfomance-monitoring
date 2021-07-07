@@ -158,7 +158,11 @@ type 'a balanced = { main:'a; ref:'a }
 
 let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking)
 let ty = List.map (fun x -> x.Data.typechecking)
+let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
 
+let map f { ref; main } = { main = f main; ref = f ref }
+
+type simplified = { ty: (interval balanced as 'a); nonty:'a; ratio:'a }
 
 let simplify ref main = M.fold (fun key times m ->
     match M.find key ref with
@@ -167,29 +171,25 @@ let simplify ref main = M.fold (fun key times m ->
       if List.length times < 2 &&  List.length ref_times < 2 then
         m
       else
-
-        let ty =
-          { main = interval_average (ty times);
-            ref  = interval_average (ty ref_times)
-          }
-        in
-        let nonty = { ref = interval_average (nonty ref_times);
-                      main = interval_average (nonty times)
-                    }
-        in
+        let map_average f x = map (fun x -> interval_average (f x)) x in
+        let data = { ref = ref_times; main = times } in
+        let ty = map_average ty data in
+        let nonty = map_average nonty data in
+        let ratio = map_average ratio data in
         if ty.main.center +. ty.main.width > epsilon then
-          M.add key (ty, nonty) m
+          M.add key {ty; nonty; ratio} m
         else
           m
   ) main M.empty
 
-let save_entry fmt pp_key key (ty, nonty) =
-          Fmt.pf fmt "%a %a %a %a %a@."
-            pp_key key
-            pp_interval ty.ref
-            pp_interval ty.main
-            pp_interval nonty.ref
-            pp_interval nonty.main
+let pp_balanced pp ppf x = Fmt.pf ppf "%a %a" pp x.ref pp x.main
+let save_entry fmt pp_key key {ty; nonty; ratio } =
+  let pp = pp_balanced pp_interval in
+  Fmt.pf fmt "%a %a %a %a@."
+    pp_key key
+    pp ty
+    pp nonty
+    pp ratio
 
 let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
 

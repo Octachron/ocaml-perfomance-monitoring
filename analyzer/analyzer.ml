@@ -14,9 +14,9 @@ let read_log log_seq =
 
 module C = Stat.Convex_from_vec(Stat.R3)
 module Input = struct
-  type t = Stat.Key.t * Stat.Pairs.t
+  type t = Stat.Key.t * Stat.simplified
   let compare (x:t) (y:t) = compare x y
-  let proj (_, (ty,nonty) : t ) =
+  let proj (_, {Stat.ty;nonty;_} : t ) =
     {
       Stat.R3.x = log (ty.main.center /. ty.ref.center);
       y = ty.main.width /. ty.ref.center;
@@ -61,7 +61,7 @@ let () =
   let m = comparison ~before ~after log in
   let epsilon = 1e-6 in
   Stat.save  "by_files.data" m;
-  let m = Stat.M.filter (fun _k ((ty,nonty): Stat.Pairs.t) ->
+  let m = Stat.M.filter (fun _k {Stat.ty;nonty;_} ->
       ty.ref.center > epsilon && nonty.ref.center > epsilon
     )
       m
@@ -83,13 +83,19 @@ let () =
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
   Array.iteri split_and_save groups;
-  let proj (_,(ty,_) : Input.t) =  ty.main.center /. ty.ref.center in
-  let antiproj (_,(_, nonty) : Input.t) =  nonty.main.center /. nonty.ref.center in
-  let h = Stat.histogram 20 proj (Array.of_seq @@ Stat.M.to_seq m) in
-  let antih = Stat.histogram 20 antiproj (Array.of_seq @@ Stat.M.to_seq m) in
-  Stat.save_histogram "hist.data" proj h;
+  let proj (_,{ty;_} : Input.t) =  ty.main.center /. ty.ref.center in
+  let antiproj (_, {nonty; _ } : Input.t) =  nonty.main.center /. nonty.ref.center in
+  let ratio_proj (_, r : Input.t) = r.ratio.main.center in
+  let hist name proj =
+    let h = Stat.histogram 20 proj (Array.of_seq @@ Stat.M.to_seq m) in
+    Stat.save_histogram name proj h
+  in
+  let () =
+    hist "hist.data" proj;
+    hist "antihist.data" antiproj;
+    hist "ratio_hist.data" ratio_proj
+  in
   Stat.save_quantiles "quantiles.data" proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_histogram "antihist.data" antiproj antih;
   Stat.save_quantiles "antiquantiles.data" antiproj (Array.of_seq @@ Stat.M.to_seq m);
   let average = Seq_average.map_and_compute proj (Stat.M.to_seq m) in
   let anti_average = Seq_average.map_and_compute antiproj (Stat.M.to_seq m) in
