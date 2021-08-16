@@ -99,6 +99,7 @@ let average = stable_average
 let variance average = map_stable_average (fun x -> let diff = x -. average in diff *. diff )
 
 type interval = { center:float; width:float }
+type summary = { min:float; mean:interval }
 
 let interval_average l =
   let n = List.length l in
@@ -108,16 +109,25 @@ let interval_average l =
   let width = factor *. sqrt (sigma_2 /. float n) in
   {center=mu; width}
 
+let min l = match l with
+  | [] -> 0.
+  | a :: q -> List.fold_left min a q
+
+let summarize l = { min = min l; mean = interval_average l }
+
 let pretty_interval ppf x =
   Fmt.pf ppf "%g±%g" x.center x.width
 
 let pp_interval ppf x =
   Fmt.pf ppf "%g %g" x.center x.width
 
+let pp_summary ppf x =
+  Fmt.pf ppf "%g %a" x.min pp_interval x.mean
+
 let print times =
   M.iter (fun {pkg;subpart} times ->
-      let i = interval_average (List.map (fun x -> x.Data.typechecking) times) in
-      Fmt.pr "%s/%s:average:%a(%a)@." pkg subpart pretty_interval i Fmt.(Dump.list Data.pp_times) times
+      let mean = interval_average (List.map (fun x -> x.Data.typechecking) times) in
+      Fmt.pr "%s/%s:average:%a(%a)@." pkg subpart pretty_interval mean Fmt.(Dump.list Data.pp_times) times
     )   times
 
 
@@ -162,7 +172,7 @@ let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
 
 let map f { ref; main } = { main = f main; ref = f ref }
 
-type simplified = { ty: (interval balanced as 'a); nonty:'a; ratio:'a }
+type simplified = { ty: (summary balanced as 'a); nonty:'a; ratio:'a }
 
 let simplify ref main = M.fold (fun key times m ->
     match M.find key ref with
@@ -171,12 +181,12 @@ let simplify ref main = M.fold (fun key times m ->
       if List.length times < 2 &&  List.length ref_times < 2 then
         m
       else
-        let map_average f x = map (fun x -> interval_average (f x)) x in
+        let map_summary f x = map (fun x -> summarize (f x)) x in
         let data = { ref = ref_times; main = times } in
-        let ty = map_average ty data in
-        let nonty = map_average nonty data in
-        let ratio = map_average ratio data in
-        if ty.main.center +. ty.main.width > epsilon then
+        let ty = map_summary ty data in
+        let nonty = map_summary nonty data in
+        let ratio = map_summary ratio data in
+        if ty.main.min > epsilon then
           M.add key {ty; nonty; ratio} m
         else
           m
@@ -184,7 +194,7 @@ let simplify ref main = M.fold (fun key times m ->
 
 let pp_balanced pp ppf x = Fmt.pf ppf "%a %a" pp x.ref pp x.main
 let save_entry fmt pp_key key {ty; nonty; ratio } =
-  let pp = pp_balanced pp_interval in
+  let pp = pp_balanced pp_summary in
   Fmt.pf fmt "%a %a %a %a@."
     pp_key key
     pp ty
@@ -195,7 +205,16 @@ let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
 
 
 let save filename m = to_filename filename (fun fmt ->
-    M.iter (save_entry fmt pp_full_key) m
+    Fmt.pf fmt
+      "File \
+       Typechecking_ref_min Typechecking_ref_mean Typechecking_ref_std \
+       Typechecking_main_min Typechecking_main_mean Typechecking_main_std \
+       Other_ref_min Other_ref_mean Other_ref_std \
+       Other_main_min Other_main_mean Other_main_std \
+       Ratio_ref_min Ratio_ref_mean Ratio_ref_std \
+       Ratio_main_min Ratio_main_mean Ratio_main_std"
+    ;
+      M.iter (save_entry fmt pp_full_key) m
   )
 
 module type Convex_space = sig
@@ -306,6 +325,20 @@ module Interval_as_vec = struct
   let pp = pretty_interval
 end
 
+
+module Summary_as_vec = struct
+  type t = summary
+  let ( + ) x y = { min= x.min +. y.min; mean = Interval_as_vec.(x.mean + y.mean) }
+  let ( - ) x y =   { min= x.min -. y.min; mean = Interval_as_vec.(x.mean - y.mean) }
+  let (|*|) x y = x.min *. y.min +. Interval_as_vec.(x.mean|*|y.mean)
+  let ( *. ) l x = { min= l *. x.min; mean = Interval_as_vec.(l *. x.mean) }
+  let ( /. ) x l = { min= x.min /. l; mean = Interval_as_vec.(x.mean /. l) }
+  let zero = { min=0.; mean = Interval_as_vec.zero}
+  let compare (x:t) (y:t) = Stdlib.compare x y
+  let pp = pp_summary
+end
+
+
 module Balanced_as_vec(V:Vec) = struct
   type t = V.t balanced
   open V
@@ -350,8 +383,8 @@ module R3 = struct
   let pp ppf v = Fmt.pf ppf "(%g %g %g)" v.x v.y v.z
 end
 
-module Intervals = Balanced_as_vec(Interval_as_vec)
-module Pairs = Pair(Intervals)(Intervals)
+module Summary_b = Balanced_as_vec(Summary_as_vec)
+module Pairs = Pair(Summary_b)(Summary_b)
 
 module Convex_from_vec(V:Vec) = struct
   include V

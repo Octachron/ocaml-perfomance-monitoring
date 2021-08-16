@@ -18,9 +18,9 @@ module Input = struct
   let compare (x:t) (y:t) = compare x y
   let proj (_, {Stat.ty;nonty;_} : t ) =
     {
-      Stat.R3.x = log (ty.main.center /. ty.ref.center);
-      y = ty.main.width /. ty.ref.center;
-      z = nonty.main.width /. nonty.ref.center
+      Stat.R3.x = log (ty.main.mean.center /. ty.ref.mean.center);
+      y = ty.main.mean.width /. ty.ref.mean.center;
+      z = nonty.main.mean.width /. nonty.ref.mean.center
     }
 end
 module Kmean = Stat.Kmeans(C)(Input)
@@ -44,25 +44,22 @@ let split n l =
   in
   split [] n l
 
-let reject_outliers proj q abs l =
-  let l = List.sort (fun x y -> compare (proj x) (proj y)) l in
-  let n = List.length l in
-  let excl = max abs @@ int_of_float (float n *. q) in
+let reject_outliers proj excl l =
+  let l = List.sort (fun x y -> compare (proj y) (proj x)) l in
   let _ ,r = split excl l in
-  let l, _ = split (n- 2 * excl) r in
-  l
+  r
 
 let () =
   let log_name = "longer_complex.log" in
   let log_seq = Log.read log_name in
   let log = read_log log_seq in
-  let pre l = reject_outliers (fun (x:Data.times) -> x.typechecking) 0.1 1 l in
+  let pre l = reject_outliers (fun (x:Data.times) -> x.typechecking) 1 l in
   let log = Db.map (Stat.M.map pre) log in
   let m = comparison ~before ~after log in
   let epsilon = 1e-6 in
   Stat.save  "by_files.data" m;
   let m = Stat.M.filter (fun _k {Stat.ty;nonty;_} ->
-      ty.ref.center > epsilon && nonty.ref.center > epsilon
+      ty.ref.min > epsilon && nonty.ref.min > epsilon
     )
       m
   in
@@ -83,9 +80,11 @@ let () =
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
   Array.iteri split_and_save groups;
-  let proj (_,{ty;_} : Input.t) =  ty.main.center /. ty.ref.center in
-  let antiproj (_, {nonty; _ } : Input.t) =  nonty.main.center /. nonty.ref.center in
-  let ratio_proj (_, r : Input.t) = r.ratio.main.center in
+  let proj (_,{ty;_} : Input.t) =  ty.main.mean.center /. ty.ref.mean.center in
+  let antiproj (_, {nonty; _ } : Input.t) =  nonty.main.mean.center /. nonty.ref.mean.center in
+  let min_proj (_,{ty;_} : Input.t) =  ty.main.min /. ty.ref.min in
+  let min_antiproj (_, {nonty; _ } : Input.t) =  nonty.main.min /. nonty.ref.min in
+  let ratio_proj (_, r : Input.t) = r.ratio.main.mean.center in
   let hist name proj =
     let h = Stat.histogram 20 proj (Array.of_seq @@ Stat.M.to_seq m) in
     Stat.save_histogram name proj h
@@ -93,12 +92,18 @@ let () =
   let () =
     hist "hist.data" proj;
     hist "antihist.data" antiproj;
-    hist "ratio_hist.data" ratio_proj
+    hist "ratio_hist.data" ratio_proj;
+    hist "min_hist.data" proj;
+    hist "min_antihist.data" antiproj;
   in
   Stat.save_quantiles "quantiles.data" proj (Array.of_seq @@ Stat.M.to_seq m);
   Stat.save_quantiles "antiquantiles.data" antiproj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "min_quantiles.data" min_proj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "min_antiquantiles.data" min_antiproj (Array.of_seq @@ Stat.M.to_seq m);
   let average = Seq_average.map_and_compute proj (Stat.M.to_seq m) in
   let anti_average = Seq_average.map_and_compute antiproj (Stat.M.to_seq m) in
+  let min_average = Seq_average.map_and_compute min_proj (Stat.M.to_seq m) in
+  let min_anti_average = Seq_average.map_and_compute min_antiproj (Stat.M.to_seq m) in
   let log_average = exp @@ Seq_average.map_and_compute (fun x -> Float.log @@ proj x) (Stat.M.to_seq m) in
   let log_anti_average = exp @@ Seq_average.map_and_compute
       (fun x -> if antiproj x <= 0. then 0. else Float.log @@ antiproj x) (Stat.M.to_seq m) in
@@ -106,9 +111,13 @@ let () =
     "@[<v>average: %g@ \
      non typechecking average: %g@ \
      exp (E (log Ty)): %g@ \
-     exp (E (log Nonty)): %g
+     exp (E (log Nonty)): %g@ \
+     Min average: %g@ \
+     Min average (non-typechecking): %g\
 @]@."
     average
     anti_average
     log_average
     log_anti_average
+    min_average
+    min_anti_average
