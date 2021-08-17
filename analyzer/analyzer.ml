@@ -44,7 +44,7 @@ let split n l =
   in
   split [] n l
 
-let reject_outliers proj excl l =
+let _reject_outliers proj excl l =
   let l = List.sort (fun x y -> compare (proj y) (proj x)) l in
   let _ ,r = split excl l in
   r
@@ -53,8 +53,6 @@ let () =
   let log_name = "longer_complex.log" in
   let log_seq = Log.read log_name in
   let log = read_log log_seq in
-  let pre l = reject_outliers (fun (x:Data.times) -> x.typechecking) 1 l in
-  let log = Db.map (Stat.M.map pre) log in
   let m = comparison ~before ~after log in
   let epsilon = 1e-6 in
   Stat.save  "by_files.data" m;
@@ -81,43 +79,57 @@ let () =
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
   Array.iteri split_and_save groups;
   let proj (_,{ty;_} : Input.t) =  ty.main.mean.center /. ty.ref.mean.center in
-  let antiproj (_, {nonty; _ } : Input.t) =  nonty.main.mean.center /. nonty.ref.mean.center in
-  let min_proj (_,{ty;_} : Input.t) =  ty.main.min /. ty.ref.min in
-  let min_antiproj (_, {nonty; _ } : Input.t) =  nonty.main.min /. nonty.ref.min in
+  let other_proj (_, {nonty; _ } : Input.t) =  nonty.main.mean.center /. nonty.ref.mean.center in
   let ratio_proj (_, r : Input.t) = r.ratio.main.mean.center in
+  let min_ratio_proj (_, r : Input.t) = r.ratio.main.min in
+  let total_proj (_, r : Input.t) = r.total.main.mean.center /. r.total.ref.mean.center  in
+  let min_proj (_,{ty;_} : Input.t) =  ty.main.min /. ty.ref.min in
+  let min_other_proj (_, {nonty; _ } : Input.t) =  nonty.main.min /. nonty.ref.min in
+  let min_total_proj (_, {total; _ } : Input.t) =  total.main.min /. total.ref.min in
   let hist name proj =
     let h = Stat.histogram 20 proj (Array.of_seq @@ Stat.M.to_seq m) in
     Stat.save_histogram name proj h
   in
   let () =
     hist "hist.data" proj;
-    hist "antihist.data" antiproj;
+    hist "other_hist.data" other_proj;
+    hist "total_hist.data" total_proj;
     hist "ratio_hist.data" ratio_proj;
-    hist "min_hist.data" proj;
-    hist "min_antihist.data" antiproj;
+    hist "min_hist.data" min_proj;
+    hist "min_other_hist.data" min_other_proj;
+    hist "min_total_hist.data" min_total_proj
   in
   Stat.save_quantiles "quantiles.data" proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "antiquantiles.data" antiproj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "other_quantiles.data" other_proj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "total_quantiles.data" total_proj (Array.of_seq @@ Stat.M.to_seq m);
   Stat.save_quantiles "min_quantiles.data" min_proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "min_antiquantiles.data" min_antiproj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "min_other_quantiles.data" min_other_proj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "min_total_quantiles.data" min_total_proj (Array.of_seq @@ Stat.M.to_seq m);
+  Stat.save_quantiles "min_ratio_quantiles.data" min_ratio_proj (Array.of_seq @@ Stat.M.to_seq m);
   let average = Seq_average.map_and_compute proj (Stat.M.to_seq m) in
-  let anti_average = Seq_average.map_and_compute antiproj (Stat.M.to_seq m) in
+  let other_average = Seq_average.map_and_compute other_proj (Stat.M.to_seq m) in
+  let total_average = Seq_average.map_and_compute total_proj (Stat.M.to_seq m) in
   let min_average = Seq_average.map_and_compute min_proj (Stat.M.to_seq m) in
-  let min_anti_average = Seq_average.map_and_compute min_antiproj (Stat.M.to_seq m) in
+  let min_other_average = Seq_average.map_and_compute min_other_proj (Stat.M.to_seq m) in
+  let min_total_average = Seq_average.map_and_compute min_total_proj (Stat.M.to_seq m) in
   let log_average = exp @@ Seq_average.map_and_compute (fun x -> Float.log @@ proj x) (Stat.M.to_seq m) in
-  let log_anti_average = exp @@ Seq_average.map_and_compute
-      (fun x -> if antiproj x <= 0. then 0. else Float.log @@ antiproj x) (Stat.M.to_seq m) in
+  let log_other_average = exp @@ Seq_average.map_and_compute
+      (fun x -> if other_proj x <= 0. then 0. else Float.log @@ other_proj x) (Stat.M.to_seq m) in
   Fmt.pr
     "@[<v>average: %g@ \
      non typechecking average: %g@ \
+     total average: %g@ \
      exp (E (log Ty)): %g@ \
      exp (E (log Nonty)): %g@ \
      Min average: %g@ \
+     Min total average: %g@ \
      Min average (non-typechecking): %g\
 @]@."
     average
-    anti_average
+    other_average
+    total_average
     log_average
-    log_anti_average
+    log_other_average
     min_average
-    min_anti_average
+    min_total_average
+    min_other_average

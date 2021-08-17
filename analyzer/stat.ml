@@ -168,11 +168,12 @@ type 'a balanced = { main:'a; ref:'a }
 
 let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking)
 let ty = List.map (fun x -> x.Data.typechecking)
+let total = List.map (fun x -> x.Data.total)
 let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
 
 let map f { ref; main } = { main = f main; ref = f ref }
 
-type simplified = { ty: (summary balanced as 'a); nonty:'a; ratio:'a }
+type simplified = { ty: (summary balanced as 'a); nonty:'a; total:'a; ratio:'a }
 
 let simplify ref main = M.fold (fun key times m ->
     match M.find key ref with
@@ -186,19 +187,21 @@ let simplify ref main = M.fold (fun key times m ->
         let ty = map_summary ty data in
         let nonty = map_summary nonty data in
         let ratio = map_summary ratio data in
+        let total = map_summary total data in
         if ty.main.min > epsilon then
-          M.add key {ty; nonty; ratio} m
+          M.add key {ty; nonty; total; ratio} m
         else
           m
   ) main M.empty
 
 let pp_balanced pp ppf x = Fmt.pf ppf "%a %a" pp x.ref pp x.main
-let save_entry fmt pp_key key {ty; nonty; ratio } =
+let save_entry fmt pp_key key {ty; nonty; total; ratio } =
   let pp = pp_balanced pp_summary in
-  Fmt.pf fmt "%a %a %a %a@."
+  Fmt.pf fmt "%a %a %a %a %a@."
     pp_key key
     pp ty
     pp nonty
+    pp total
     pp ratio
 
 let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
@@ -211,6 +214,8 @@ let save filename m = to_filename filename (fun fmt ->
        Typechecking_main_min Typechecking_main_mean Typechecking_main_std \
        Other_ref_min Other_ref_mean Other_ref_std \
        Other_main_min Other_main_mean Other_main_std \
+       Total_ref_min Total_ref_mean Total_ref_std \
+       Total_main_min Total_main_mean Total_main_std \
        Ratio_ref_min Ratio_ref_mean Ratio_ref_std \
        Ratio_main_min Ratio_main_mean Ratio_main_std"
     ;
