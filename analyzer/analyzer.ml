@@ -114,7 +114,7 @@ let () =
   in
   Random.self_init ();
   let groups =
-    Kmean.compute ~k:20 ~fuel:1_000 ~epsilon
+    Kmean.compute ~k:10 ~fuel:1_000 ~epsilon
       (Stat.M.cardinal m)
       (Stat.M.to_seq m)
   in
@@ -129,16 +129,16 @@ let () =
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
   Array.iteri split_and_save groups;
-  let hist proj =
+  let points = Array.of_seq @@ Stat.M.to_seq m in
+  let hist_and_quantiles proj =
+    let ordered_points = Stat.order_statistic proj.f points in
+    let h = Stat.histogram 20 ordered_points in
     let name = out_name (Fmt.str "%s_hist.data" proj.name) in
-    let h = Stat.histogram 20 proj.f (Array.of_seq @@ Stat.M.to_seq m) in
-    Stat.save_histogram name proj.f h
+    Stat.save_histogram name h;
+    Stat.save_quantiles (out_name (Fmt.str "%s_quantiles.data" proj.name)) ordered_points;
+    Stat.save_quantile_table proj.name (out_name ((Fmt.str "%s_quantile_table.md") proj.name)) ordered_points
   in
-  let () = List.iter hist Projectors.all in
-  let quantiles np =
-    let name = out_name (Fmt.str "%s_quantiles.data" np.name) in
-    Stat.save_quantiles name np.f (Array.of_seq @@ Stat.M.to_seq m) in
-  List.iter quantiles Projectors.all;
+  let () = List.iter hist_and_quantiles Projectors.all in
   let report_average np =
     let average = Seq_average.map_and_compute np.f (Stat.M.to_seq m) in
     Fmt.pr "average %s: %g@." np.name average

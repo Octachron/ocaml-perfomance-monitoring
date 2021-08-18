@@ -217,7 +217,7 @@ let save filename m = to_filename filename (fun fmt ->
        Total_ref_min Total_ref_mean Total_ref_std \
        Total_main_min Total_main_mean Total_main_std \
        Ratio_ref_min Ratio_ref_mean Ratio_ref_std \
-       Ratio_main_min Ratio_main_mean Ratio_main_std"
+       Ratio_main_min Ratio_main_mean Ratio_main_std@."
     ;
       M.iter (save_entry fmt pp_full_key) m
   )
@@ -404,35 +404,43 @@ module Convex_from_vec(V:Vec) = struct
 end
 
 
-let quantiles proj all ppf =
-  let () = Array.sort (fun x y -> compare (proj x) (proj y)) all in
-  let n = Array.length all in
-  let quantile i = proj all.( int_of_float @@ i *. float n  ) in
-  Fmt.pr "Quantiles: 1%% :%g; 10%%: %g -> 25%%: %g -> 50%%: %g -> 75%%: %g -> 90%%: %g -> 99%%: %g -> 99.9%%: %g @."
-    (quantile 0.01)
-    (quantile 0.1)
-    (quantile 0.25)
-    (quantile 0.5)
-    (quantile 0.75)
-    (quantile 0.9)
-    (quantile 0.99)
-    (quantile 0.999)
-  ;
-  Array.iteri (fun i x -> Fmt.pf ppf "%g %g@." (proj x) ((100. *. float i) /. float n)) all
+type ordered = Ordered of float array [@@unboxed]
 
-let histogram nbins proj all =
-  let () = Array.sort (fun x y -> compare (proj x) (proj y)) all in
-  let npoints = Array.length all in
+let order_statistic proj all =
+  let all = Array.map proj all in
+  let () = Array.sort compare all in
+  Ordered all
+
+let quantile (Ordered ordered_points) i = ordered_points.( int_of_float @@ i *. float (Array.length ordered_points)  )
+
+let quantiles_table name ordered_points ppf =
+  let row ppf i = Fmt.pf ppf "| %g%% | %g |@," (100. *. i) (quantile ordered_points i) in
+  Fmt.pf ppf "@[<v>\
+              | %% |  %s quantiles      |@,\
+              |---|--------------------|@,"
+    name
+  ;
+  List.iter (row ppf) [0.01; 0.1; 0.25; 0.5; 0.75;0.9;0.99;0.999];
+  Fmt.pf ppf "@]@."
+
+
+let quantiles_data (Ordered ordered_points) ppf =
+  Array.iteri
+    (fun i x -> Fmt.pf ppf "%g %g@." x ((100. *. float i) /. float (Array.length ordered_points)))
+    ordered_points
+
+let histogram nbins (Ordered ordered_points) =
+  let npoints = Array.length ordered_points in
   let size =  npoints / nbins in
   let rest = npoints - nbins * size in
   let sizes = Array.init (nbins + 1) (fun i -> if i = 0 then 0 else if i < rest then size + 1 else size) in
   let () = Array.iteri (fun i x -> if i > 0 then sizes.(i) <- x + sizes.(i-1)) sizes in
-  Array.init nbins (fun n -> Array.sub all sizes.(n) (sizes.(n+1)-sizes.(n)))
+  Array.init nbins (fun n -> Array.sub ordered_points sizes.(n) (sizes.(n+1)-sizes.(n)))
 
-let pp_histogram proj h ppf =
+let pp_histogram h ppf =
   let print_cell ppf a =
-    let min = proj a.(0) in
-    let max = proj a.(Array.length a - 1) in
+    let min =  a.(0) in
+    let max = a.(Array.length a - 1) in
     let s = Array.length a in
     let density = float s /.  (max -. min) in
     let density = if density > Float.max_float then Float.max_float /. 100. else density in
@@ -440,5 +448,6 @@ let pp_histogram proj h ppf =
   in
   Array.iter (print_cell ppf) h
 
- let save_histogram name proj h = to_filename name (pp_histogram proj h)
- let save_quantiles name proj all = to_filename name (quantiles proj all)
+let save_histogram name h = to_filename name (pp_histogram  h)
+let save_quantiles name ordered = to_filename name (quantiles_data ordered)
+let save_quantile_table name filename ordered = to_filename filename (quantiles_table name ordered)
