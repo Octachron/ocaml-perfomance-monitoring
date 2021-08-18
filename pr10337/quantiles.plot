@@ -14,7 +14,7 @@ set xlabel "Quantiles"
 set ylabel "after/before %"
 
 set output "quantiles.pdf"
-plot "quantiles.data" u 2:1 t "CDF" w l
+plot "mean_quantiles.data" u 2:1 t "CDF" w l
 
 set title "Quantiles for non-typechecking times"
 set output "other_quantiles.pdf"
@@ -30,12 +30,12 @@ plot "min_quantiles.data" u 2:1 t "CDF" w l
 
 set title "Quantiles for minimal nontypechecking times"
 set output "min_other_quantiles.pdf"
-plot "min_antiquantiles.data" u 2:1 t "CDF" w l
+plot "min_other_quantiles.data" u 2:1 t "CDF" w l
 
 set title "Quantiles for minimal total times"
 set output "min_total_quantiles.pdf"
 plot "min_total_quantiles.data" u 2:1 t "CDF" w l
 
 set title "Quantiles for profile"
-set output "min_ratio_quantiles.pdf"
-plot "min_ratio_quantiles.data" u 2:1 t "CDF" w l
+set output "min_profile_quantiles.pdf"
+plot "min_profile_quantiles.data" u 2:1 t "CDF" w l

@@ -12,7 +12,7 @@ set ylabel "probability density"
 set yrange [0:17000]
 set title "Typechecking increase histogram"
 set output "hist.pdf"
-plot "hist.data" u (($1+$2)/2):3:(($2-$1)) w boxes t ""
+plot "mean_hist.data" u (($1+$2)/2):3:(($2-$1)) w boxes t ""
 
 
 set yrange [0:30000]
@@ -41,4 +41,4 @@ set yrange [0:6000]
 set xlabel "typechecking/total"
 set title "Time spent in typechecking histogram"
 set output "profile_hist.pdf"
-plot "ratio_hist.data" u (($1+$2)/2):3:(($2-$1)) w boxes t ""
+plot "profile_hist.data" u (($1+$2)/2):3:(($2-$1)) w boxes t ""
