@@ -1,1 +1,6 @@
 _build
+*.pdf
+*.data
+*.log
+*.xz
+log

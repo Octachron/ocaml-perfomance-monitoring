@@ -49,13 +49,64 @@ let _reject_outliers proj excl l =
   let _ ,r = split excl l in
   r
 
+let log_files: string list ref = ref []
+let data_dir = ref None
+
+let set r = Arg.String (fun x -> r := Some x)
+let add_item l = Arg.String (fun x -> l := x :: !l)
+let anon x = log_files := x :: !log_files
+
+let log =  "-log" , add_item log_files, "read data from file"
+let dir =  "-output-dir", set data_dir, "output dir"
+
+let read_logs logs =
+  List.fold_left (fun s x -> Seq.append (Log.read x) s) (fun () -> Seq.Nil) logs
+
+let out_name x = match !data_dir with
+  | None -> x
+  | Some dir -> Filename.concat dir x
+
+
+module Projectors = struct
+  type named = { name:string; f: Input.t -> float }
+  let mean (_,{ty;_} : Input.t) =  ty.main.mean.center /. ty.ref.mean.center
+  let other (_, {nonty; _ } : Input.t) =  nonty.main.mean.center /. nonty.ref.mean.center
+  let ratio (_, r : Input.t) = r.ratio.main.mean.center
+  let min_ratio (_, r : Input.t) = r.ratio.main.min
+  let total (_, r : Input.t) = r.total.main.mean.center /. r.total.ref.mean.center
+  let min (_,{ty;_} : Input.t) =  ty.main.min /. ty.ref.min
+  let min_other (_, {nonty; _ } : Input.t) =  nonty.main.min /. nonty.ref.min
+  let min_total (_, {total; _ } : Input.t) =  total.main.min /. total.ref.min
+  let all =
+    [
+      {name="mean"; f=mean} ;
+      {name="other"; f=other};
+      {name="total"; f=total};
+      {name="profile"; f=ratio};
+      {name="min"; f=min};
+      {name="min_other"; f=min_other};
+      {name="min_total"; f= min_total};
+      {name="min_profile"; f=min_ratio};
+    ]
+
+
+  let logarithmics =
+    let log p x =
+      let r = p x in
+      if r <= 0. then 0. else Float.log r
+    in
+    List.map (fun np -> { name = "log_" ^ np.name; f = log np.f }) all
+
+end
+open Projectors
+
 let () =
-  let log_name = "longer_complex.log" in
-  let log_seq = Log.read log_name in
+  Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
+  let log_seq = read_logs !log_files in
   let log = read_log log_seq in
   let m = comparison ~before ~after log in
   let epsilon = 1e-6 in
-  Stat.save  "by_files.data" m;
+  Stat.save (out_name "by_files.data") m;
   let m = Stat.M.filter (fun _k {Stat.ty;nonty;_} ->
       ty.ref.min > epsilon && nonty.ref.min > epsilon
     )
@@ -78,58 +129,23 @@ let () =
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
   Array.iteri split_and_save groups;
-  let proj (_,{ty;_} : Input.t) =  ty.main.mean.center /. ty.ref.mean.center in
-  let other_proj (_, {nonty; _ } : Input.t) =  nonty.main.mean.center /. nonty.ref.mean.center in
-  let ratio_proj (_, r : Input.t) = r.ratio.main.mean.center in
-  let min_ratio_proj (_, r : Input.t) = r.ratio.main.min in
-  let total_proj (_, r : Input.t) = r.total.main.mean.center /. r.total.ref.mean.center  in
-  let min_proj (_,{ty;_} : Input.t) =  ty.main.min /. ty.ref.min in
-  let min_other_proj (_, {nonty; _ } : Input.t) =  nonty.main.min /. nonty.ref.min in
-  let min_total_proj (_, {total; _ } : Input.t) =  total.main.min /. total.ref.min in
-  let hist name proj =
-    let h = Stat.histogram 20 proj (Array.of_seq @@ Stat.M.to_seq m) in
-    Stat.save_histogram name proj h
+  let hist proj =
+    let name = out_name (Fmt.str "%s_hist.data" proj.name) in
+    let h = Stat.histogram 20 proj.f (Array.of_seq @@ Stat.M.to_seq m) in
+    Stat.save_histogram name proj.f h
   in
-  let () =
-    hist "hist.data" proj;
-    hist "other_hist.data" other_proj;
-    hist "total_hist.data" total_proj;
-    hist "ratio_hist.data" ratio_proj;
-    hist "min_hist.data" min_proj;
-    hist "min_other_hist.data" min_other_proj;
-    hist "min_total_hist.data" min_total_proj
+  let () = List.iter hist Projectors.all in
+  let quantiles np =
+    let name = out_name (Fmt.str "%s_quantiles.data" np.name) in
+    Stat.save_quantiles name np.f (Array.of_seq @@ Stat.M.to_seq m) in
+  List.iter quantiles Projectors.all;
+  let report_average np =
+    let average = Seq_average.map_and_compute np.f (Stat.M.to_seq m) in
+    Fmt.pr "average %s: %g@." np.name average
   in
-  Stat.save_quantiles "quantiles.data" proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "other_quantiles.data" other_proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "total_quantiles.data" total_proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "min_quantiles.data" min_proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "min_other_quantiles.data" min_other_proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "min_total_quantiles.data" min_total_proj (Array.of_seq @@ Stat.M.to_seq m);
-  Stat.save_quantiles "min_ratio_quantiles.data" min_ratio_proj (Array.of_seq @@ Stat.M.to_seq m);
-  let average = Seq_average.map_and_compute proj (Stat.M.to_seq m) in
-  let other_average = Seq_average.map_and_compute other_proj (Stat.M.to_seq m) in
-  let total_average = Seq_average.map_and_compute total_proj (Stat.M.to_seq m) in
-  let min_average = Seq_average.map_and_compute min_proj (Stat.M.to_seq m) in
-  let min_other_average = Seq_average.map_and_compute min_other_proj (Stat.M.to_seq m) in
-  let min_total_average = Seq_average.map_and_compute min_total_proj (Stat.M.to_seq m) in
-  let log_average = exp @@ Seq_average.map_and_compute (fun x -> Float.log @@ proj x) (Stat.M.to_seq m) in
-  let log_other_average = exp @@ Seq_average.map_and_compute
-      (fun x -> if other_proj x <= 0. then 0. else Float.log @@ other_proj x) (Stat.M.to_seq m) in
-  Fmt.pr
-    "@[<v>average: %g@ \
-     non typechecking average: %g@ \
-     total average: %g@ \
-     exp (E (log Ty)): %g@ \
-     exp (E (log Nonty)): %g@ \
-     Min average: %g@ \
-     Min total average: %g@ \
-     Min average (non-typechecking): %g\
-@]@."
-    average
-    other_average
-    total_average
-    log_average
-    log_other_average
-    min_average
-    min_total_average
-    min_other_average
+  let report_geometric_average np =
+    let average = Seq_average.map_and_compute np.f (Stat.M.to_seq m) in
+    Fmt.pr "geometric average %s: %g@." np.name (exp average)
+  in
+  List.iter report_average Projectors.all;
+  List.iter report_geometric_average Projectors.logarithmics

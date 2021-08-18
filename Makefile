@@ -18,7 +18,7 @@ run:
 	cset shield --exec dune -- exec ./runner/runner.exe
 
 analyze:
-	dune exec ./analyzer/analyzer.exe
+	dune exec ./analyzer/analyzer.exe -- -output-dir pr10337 -log pr10337/longer_complex.log
 
 full:
 	dune exec ./runner/runner.exe
