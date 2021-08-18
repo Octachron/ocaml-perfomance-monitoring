@@ -175,25 +175,70 @@ We can also have a quick look at the quantiles for the non-typechecking time
 but here the only curiosity if that the curve is more symmetric and we have 25% of files for which the non-typechecking compilation time
 decrease randonmy.
 
+
+## Noise models and minima
+
+One issue with our previous analysis is this structural bias that we measure in the non-typechecking average times across files.
+A possibility to mitigate this issue is to change our noise model. Using an average, we implicitly assumed that the compilation time was
+mostly:
+
+```
+observable_compilation_time = theoretical_computation_time + noise
+```
+where noise is a random variable with at least a finite variance and a mean of `0`. Indeed, with this symmetry hypothesis
+the expectation of the observable computation time aligns with the theoretical compilation time:
+```
+E[observable_computation_time] = E[theoretical_computation_time] + E[noise] = theoretical_computation_time
+```
+Similarly, the variance hypothesis ensure that the empirical average hypothesis converges relatively well towards the theoretical expectation.
+However, we can imagine another noise model with a multiplicative noise (due to CPU scheduling for instance),
+```
+observable_compilation_time = scheduling_noise * theoretical_computation_time + noise
+```
+with both ` scheduling_noise>1` and `noise>1`.  With this model, the expectation of the observable compilation time does not match up with
+the theoretical computation time:
+```
+E[observable_computation_time] - theoretical_computation_time  = E[(scheduling_noise - 1) * theoretical_computation_time] + E[noise] = 
+    (E[scheduling_noise]-1) * theoretical_computation_time +  E[noise]
+```
+Thus, in this model, the average observable computation time is a structurally biased estimator for the theoretical computation time.
+And the behavior that we observed for the non-typechecking time is not in contradiction with this model.
+
+However, the positivity of the noise opens another avenue for estimators: we can consider the minima of a series of independants realization.
+Then, we have
+```
+min(observable_compilation_time) = min(scheduling_noise * theoretical_computation_time) + min(noise) = theoretical_computation_time
+```
+if the `scheduling_noise` is the left-bounds of the essential support of the `scheduling_noise` and `noise` are `1` and `0` respectively.
+
+
+## Comparing minima
+
+We can then restart out analysis using the minimal compilation time file-by-file.
+
+![Relative change in minimal typechecking time by files](min_ratio.svg)
+
+
+## Comparing minima, quantiles
+
+
+
+
 ## Compilation profile
 
 
 ![Relative time spent in typechekhing  by files](profile_ratio.svg)
 
 
-## Comparing minima
 
 ## Conclusion
 
 ## Appendices
 
 
-### Mean-based cloud points
-
 
 ### Min-based cloud points
 
-![Relative change in minimal typechecking time by files](min_ratio.svg)
 ![Relative change in minimal non-typechecking time by files](min_other_ratio.svg)
 ![Relative change in minimal total time by files](min_total_ratio.svg)
 
