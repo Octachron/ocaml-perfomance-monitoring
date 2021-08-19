@@ -52,7 +52,6 @@ plot "by_files.data" u ($0):(($18)/$15):(($19)/$15) w yerrorbars pt 0 title "Ave
 
 # profile
 
-set xrange [0:2100]
 set yrange [0.:1.]
 
 
