@@ -60,7 +60,7 @@ In the graph above, there are few remarkable points:
 - As expected, the average typechecking time increased for almost all files
 - A significant portion of points are stuck to the line "after/before=1". This means that
 for those files there was no changes at all of the typechecking times.
-- The standard deviation time varies wildly across packages. The typechecking of coq files tend to have a
+- The standard deviation time varies wildly across packages. The typechecking of some dune files tend to have a
   very high variances. However outside of those files, the standard deviation seems moderate, and the
   mean estimator seem to have converged.
 - We have a handful a files for which the typechecking time more than doubled. However the relative typechecking time
@@ -357,7 +357,7 @@ to check how much time is spent on typechecking. We can start by looking at the 
 
 We have here a relatively uniform cloud of points between 20-60% of time spent in typechecking compared to total
 compilation time. However, we have a clear cluster of files for which typechecking accounts for 90% of the total compilation
-time. Interestingly, this cluster of points corresponds to the coq cluster of files with a very variance that we had identified
+time. Interestingly, this cluster of points corresponds to the dune cluster of files with a very variance that we had identified
 earlier. This explains why those files have essentially the same profile when looking at the total and typechecking compilation
 time: in their case, typechecking accounts for most of the work done during compilation.
 

@@ -147,7 +147,7 @@ let () =
   let log = read_log log_seq in
   let m = comparison ~before ~after log in
   let epsilon = 1e-6 in
-  let m = Stat.By_files.filter (fun _k {Stat.ty;_} -> ty.ref.min > epsilon)
+  let m = Stat.By_files.filter (fun _k {Stat.ty;nonty; _} -> ty.ref.min > epsilon && nonty.ref.min > epsilon && nonty.main.min > epsilon )
       m
   in
   Stat.save (out_name "by_files.data") m;
