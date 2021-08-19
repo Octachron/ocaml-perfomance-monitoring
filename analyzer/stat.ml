@@ -6,24 +6,21 @@ module type observable = sig
   val add: sample -> t -> t
 end
 
-module Key = struct
-  type t = { pkg: string; subpart: string }
+module File_key = struct
+  type t = Data.file = { pkg: string; name: string }
   let compare: t -> t -> int = Stdlib.compare
 end
 
-module M = Map.Make(Key)
-module Pkg = Map.Make(String)
-
-
+module By_files = Map.Make(File_key)
+module By_pkg = Map.Make(String)
 
 module Stat(O:observable with type sample = Data.times) = struct
-  let empty = M.empty
-  let add {Data.switch=_; pkg;subpart;time;total_time} m =
-    let key = { Key.pkg; subpart } in
+  let empty = By_files.empty
+  let add {Data.switch=_; key; time;total_time} m =
     let observation : Data.times = { typechecking=time; total=total_time } in
-    match M.find key m with
-    | exception Not_found -> M.add key (O.singleton observation) m
-    | observable -> M.add key O.(add observation observable) m
+    match By_files.find key m with
+    | exception Not_found -> By_files.add key (O.singleton observation) m
+    | observable -> By_files.add key O.(add observation observable) m
 
   let add_list ls o = List.fold_left (fun acc x -> add x acc) o ls
 end
@@ -125,9 +122,9 @@ let pp_summary ppf x =
   Fmt.pf ppf "%g %a" x.min pp_interval x.mean
 
 let print times =
-  M.iter (fun {pkg;subpart} times ->
+  By_files.iter (fun {pkg;name} times ->
       let mean = interval_average (List.map (fun x -> x.Data.typechecking) times) in
-      Fmt.pr "%s/%s:average:%a(%a)@." pkg subpart pretty_interval mean Fmt.(Dump.list Data.pp_times) times
+      Fmt.pr "%s/%s:average:%a(%a)@." pkg name pretty_interval mean Fmt.(Dump.list Data.pp_times) times
     )   times
 
 
@@ -146,10 +143,10 @@ let bootstrap_ratio_samples x y =
   let n = max (Array.length x) (Array.length y) in
   Array.to_list @@ Array.init n (fun _ -> bootstrap_ratio x y ())
 
-let print_raw_entry name ppf (key:Key.t) times =
+let print_raw_entry name ppf (key:File_key.t) times =
   let space ppf () = Fmt.pf ppf " " in
   let list = Fmt.(list ~sep:space Data.pp_times) in
-  Fmt.pf ppf "%s %s %s %a@." name key.pkg key.subpart list times
+  Fmt.pf ppf "%s %s %s %a@." name key.pkg key.name list times
 
 let to_filename filename f =
   let chan = open_out filename in
@@ -161,7 +158,7 @@ let to_filename filename f =
 
 let save_raw name stat =
   let name ="raw_"^ name ^ ".data" in
-  to_filename name (fun fmt -> M.iter (print_raw_entry name fmt) stat)
+  to_filename name (fun fmt -> By_files.iter (print_raw_entry name fmt) stat)
 
 
 type 'a balanced = { main:'a; ref:'a }
@@ -175,8 +172,8 @@ let map f { ref; main } = { main = f main; ref = f ref }
 
 type simplified = { ty: (summary balanced as 'a); nonty:'a; total:'a; ratio:'a }
 
-let simplify ref main = M.fold (fun key times m ->
-    match M.find key ref with
+let simplify ref main = By_files.fold (fun key times m ->
+    match By_files.find key ref with
     | exception Not_found -> m
     | ref_times ->
       if List.length times < 2 &&  List.length ref_times < 2 then
@@ -189,10 +186,10 @@ let simplify ref main = M.fold (fun key times m ->
         let ratio = map_summary ratio data in
         let total = map_summary total data in
         if ty.main.min > epsilon then
-          M.add key {ty; nonty; total; ratio} m
+          By_files.add key {ty; nonty; total; ratio} m
         else
           m
-  ) main M.empty
+  ) main By_files.empty
 
 let pp_balanced pp ppf x = Fmt.pf ppf "%a %a" pp x.ref pp x.main
 let save_entry fmt pp_key key {ty; nonty; total; ratio } =
@@ -204,7 +201,7 @@ let save_entry fmt pp_key key {ty; nonty; total; ratio } =
     pp total
     pp ratio
 
-let pp_full_key ppf (key:Key.t) = Fmt.pf ppf "%s:%s" key.pkg key.subpart
+let pp_full_key ppf (key:File_key.t) = Fmt.pf ppf "%s:%s" key.pkg key.name
 
 
 let save filename m = to_filename filename (fun fmt ->
@@ -219,7 +216,7 @@ let save filename m = to_filename filename (fun fmt ->
        Ratio_ref_min Ratio_ref_mean Ratio_ref_std \
        Ratio_main_min Ratio_main_mean Ratio_main_std@."
     ;
-      M.iter (save_entry fmt pp_full_key) m
+      By_files.iter (save_entry fmt pp_full_key) m
   )
 
 module type Convex_space = sig

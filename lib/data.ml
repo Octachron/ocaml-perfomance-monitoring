@@ -1,10 +1,13 @@
-type typechecking_stat = { switch:string; pkg: string; subpart: string; time:float; total_time:float }
+
+type 'k typechecking_stat = { switch:string; key:'k; time:float; total_time:float }
+
+type file = { pkg:string; name:string }
 
 let typechecking_times ~switch ~pkg l  =
   let typechecking {Parse.name; time; children} =
     match List.find_opt (fun child -> child.Parse.name = "typing") children with
-    | None -> { switch; pkg; subpart=name;  time=0.; total_time=time}
-    | Some child -> { switch; pkg; subpart=name; time=child.time; total_time = time}
+    | None -> { switch; key={pkg; name};  time=0.; total_time=time}
+    | Some child -> { switch; key={pkg;name}; time=child.time; total_time = time}
   in
   List.map typechecking l
 

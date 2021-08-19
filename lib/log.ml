@@ -1,11 +1,11 @@
 let fmt: _ format6 = "%s %s %s %g %g"
 
-let write_entry ppf (x:Data.typechecking_stat) =
-  Fmt.pf ppf fmt x.switch x.pkg x.subpart x.time x.total_time;
+let write_entry ppf (x:Data.file Data.typechecking_stat) =
+  Fmt.pf ppf fmt x.switch x.key.pkg x.key.name x.time x.total_time;
   Fmt.pf ppf "@."
 
 let scan_entry s =
-  Scanf.sscanf s fmt (fun switch pkg subpart time total_time -> { Data.switch; pkg; subpart; time; total_time })
+  Scanf.sscanf s fmt (fun switch pkg name time total_time -> { Data.switch; key = {Data.pkg; name}; time; total_time })
 
 let write_many ppf x = List.iter (write_entry ppf) x
 

@@ -1,6 +1,6 @@
 module Db = Map.Make(String)
 
-let read_log_entry db (x:Data.typechecking_stat) =
+let read_log_entry db (x:Data.file Data.typechecking_stat) =
   let switch_stat =
     match Db.find x.switch db with
     | x -> x
@@ -14,7 +14,7 @@ let read_log log_seq =
 
 module C = Stat.Convex_from_vec(Stat.R3)
 module Input = struct
-  type t = Stat.Key.t * Stat.simplified
+  type t = Stat.File_key.t * Stat.simplified
   let compare (x:t) (y:t) = compare x y
   let proj (_, {Stat.ty;nonty;_} : t ) =
     {
@@ -100,26 +100,36 @@ module Projectors = struct
 end
 open Projectors
 
-let () =
-  Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
-  let log_seq = read_logs !log_files in
-  let log = read_log log_seq in
-  let m = comparison ~before ~after log in
-  let epsilon = 1e-6 in
-  Stat.save (out_name "by_files.data") m;
-  let m = Stat.M.filter (fun _k {Stat.ty;nonty;_} ->
-      ty.ref.min > epsilon && nonty.ref.min > epsilon
-    )
-      m
+let by_pkg_data seq ppf =
+  let by_pkg = Stat.By_pkg.empty in
+  let add key _data m =
+    let key = key.Data.pkg in
+    let value =
+      match Stat.By_pkg.find_opt key m with
+      | None -> 1
+      | Some x -> 1 + x
+    in
+    Stat.By_pkg.add key value m
   in
+  let m = Seq.fold_left (fun m (key,data) -> add key data m) by_pkg seq in
+  let pp ppf (key,x,s) = Fmt.pf ppf "%s %d %d@." key x s in
+  let rec cumulative s seq () = match seq () with
+    | Seq.Nil -> Seq.Nil
+    | Seq.Cons( (key,x), r ) ->
+      let s = x + s in
+      Seq.Cons( (key,x,s), cumulative s r )
+  in
+  Seq.iter (pp ppf) (cumulative 0 @@ Stat.By_pkg.to_seq m)
+
+let kmeans epsilon m =
   Random.self_init ();
   let groups =
     Kmean.compute ~k:10 ~fuel:1_000 ~epsilon
-      (Stat.M.cardinal m)
-      (Stat.M.to_seq m)
+      (Stat.By_files.cardinal m)
+      (Stat.By_files.to_seq m)
   in
   let split g =
-    Kmean.Group.fold (fun (key,p) m -> Stat.M.add key p m) g.Kmean.group Stat.M.empty
+    Kmean.Group.fold (fun (key,p) m -> Stat.By_files.add key p m) g.Kmean.group Stat.By_files.empty
   in
   let split_and_save i x =
     let name = Fmt.str "group_%d.data" i in
@@ -128,8 +138,20 @@ let () =
     Stat.save name data
   in
   Array.sort (fun y x -> compare (Kmean.Points.cardinal x.Kmean.points) (Kmean.Points.cardinal y.Kmean.points) ) groups;
-  Array.iteri split_and_save groups;
-  let points = Array.of_seq @@ Stat.M.to_seq m in
+  Array.iteri split_and_save groups
+
+
+let () =
+  Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
+  let log_seq = read_logs !log_files in
+  let log = read_log log_seq in
+  let m = comparison ~before ~after log in
+  let epsilon = 1e-6 in
+  let m = Stat.By_files.filter (fun _k {Stat.ty;_} -> ty.ref.min > epsilon)
+      m
+  in
+  Stat.save (out_name "by_files.data") m;
+  let points = Array.of_seq @@ Stat.By_files.to_seq m in
   let hist_and_quantiles proj =
     let ordered_points = Stat.order_statistic proj.f points in
     let h = Stat.histogram 20 ordered_points in
@@ -139,13 +161,16 @@ let () =
     Stat.save_quantile_table proj.name (out_name ((Fmt.str "%s_quantile_table.md") proj.name)) ordered_points
   in
   let () = List.iter hist_and_quantiles Projectors.all in
-  let report_average np =
-    let average = Seq_average.map_and_compute np.f (Stat.M.to_seq m) in
-    Fmt.pr "average %s: %g@." np.name average
+  let report_average ppf np =
+    let average = Seq_average.map_and_compute np.f (Stat.By_files.to_seq m) in
+    Fmt.pf ppf "average %s: %g@." np.name average
   in
-  let report_geometric_average np =
-    let average = Seq_average.map_and_compute np.f (Stat.M.to_seq m) in
-    Fmt.pr "geometric average %s: %g@." np.name (exp average)
+  let report_geometric_average ppf np =
+    let average = Seq_average.map_and_compute np.f (Stat.By_files.to_seq m) in
+    Fmt.pf ppf "geometric average %s: %g@." np.name (exp average)
   in
-  List.iter report_average Projectors.all;
-  List.iter report_geometric_average Projectors.logarithmics
+  Stat.to_filename (out_name "averages.data") (fun ppf ->
+      List.iter (report_average ppf) Projectors.all;
+      List.iter (report_geometric_average ppf) Projectors.logarithmics
+    );
+  Stat.to_filename (out_name "pkgs.data") (by_pkg_data (Stat.By_files.to_seq m))
