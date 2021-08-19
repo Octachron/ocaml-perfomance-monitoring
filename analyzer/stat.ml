@@ -219,6 +219,7 @@ let save filename m = to_filename filename (fun fmt ->
       By_files.iter (save_entry fmt pp_full_key) m
   )
 
+
 module type Convex_space = sig
   type t
   val compare: t -> t -> int
@@ -403,8 +404,8 @@ end
 
 type ordered = Ordered of float array [@@unboxed]
 
-let order_statistic proj all =
-  let all = Array.map proj all in
+let order_statistic all =
+  let all = Array.of_seq all in
   let () = Array.sort compare all in
   Ordered all
 

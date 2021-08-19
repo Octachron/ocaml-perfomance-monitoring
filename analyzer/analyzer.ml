@@ -66,36 +66,74 @@ let out_name x = match !data_dir with
   | None -> x
   | Some dir -> Filename.concat dir x
 
+let epsilon = 1e-6
 
 module Projectors = struct
-  type named = { name:string; f: Input.t -> float }
-  let mean (_,{ty;_} : Input.t) =  ty.main.mean.center /. ty.ref.mean.center
-  let other (_, {nonty; _ } : Input.t) =  nonty.main.mean.center /. nonty.ref.mean.center
-  let ratio (_, r : Input.t) = r.ratio.main.mean.center
-  let min_ratio (_, r : Input.t) = r.ratio.main.min
-  let total (_, r : Input.t) = r.total.main.mean.center /. r.total.ref.mean.center
-  let min (_,{ty;_} : Input.t) =  ty.main.min /. ty.ref.min
-  let min_other (_, {nonty; _ } : Input.t) =  nonty.main.min /. nonty.ref.min
-  let min_total (_, {total; _ } : Input.t) =  total.main.min /. total.ref.min
+  type _ with_std =
+    | No: float with_std
+    | Yes: (float * float) with_std
+
+  type 'a named = { kind:'a with_std; name:string; f: Input.t -> 'a option }
+  type any = Any: 'a named -> any  [@@unboxed]
+  let mean (_,{ty;_} : Input.t) =
+    let denom = ty.ref.mean.center in
+    if denom < epsilon then
+      None
+    else
+      Some (ty.main.mean.center /. denom, ty.main.mean.width /. denom)
+  let other (_, {nonty; _ } : Input.t) =
+    let denom = nonty.ref.mean.center in
+    if denom < epsilon then None
+      else
+        Some (nonty.main.mean.center /. denom, nonty.main.mean.width /. denom)
+  let total (_, r : Input.t) =
+    let denom = r.total.ref.mean.center in
+    if denom < epsilon then None
+      else
+      Some (r.total.main.mean.center /. denom, r.total.main.mean.width /. denom)
+
+
+  let ratio (_, r : Input.t) = Some r.ratio.main.mean.center
+  let min_ratio (_, r : Input.t) = Some r.ratio.main.min
+  let min (_,{ty;_} : Input.t) =
+    let denom = ty.ref.min in
+    if denom < epsilon then None
+    else  Some (ty.main.min /. denom)
+
+  let min_other (_, {nonty; _ } : Input.t) =
+    let denom = nonty.ref.min in
+    if denom < epsilon then None
+    else Some (nonty.main.min /. denom)
+  let min_total (_, {total; _ } : Input.t) =
+    let denom = total.ref.min in
+    if denom < epsilon then None
+    else Some (total.main.min /. denom)
   let all =
     [
-      {name="mean"; f=mean} ;
-      {name="other"; f=other};
-      {name="total"; f=total};
-      {name="profile"; f=ratio};
-      {name="min"; f=min};
-      {name="min_other"; f=min_other};
-      {name="min_total"; f= min_total};
-      {name="min_profile"; f=min_ratio};
+      Any {kind=Yes; name="mean"; f=mean} ;
+      Any {kind=Yes; name="other"; f=other};
+      Any {kind=Yes; name="total"; f=total};
+      Any {kind=No; name="profile"; f=ratio};
+      Any {kind=No; name="min"; f=min};
+      Any {kind=No; name="min_other"; f=min_other};
+      Any {kind=No; name="min_total"; f= min_total};
+      Any {kind=No; name="min_profile"; f=min_ratio};
     ]
 
 
-  let logarithmics =
-    let log p x =
-      let r = p x in
-      if r <= 0. then 0. else Float.log r
+  let remove_std (Any p) =
+    let f (type a) (p: a named) x: float option =
+      match p.kind, p.f x with
+      | No, x -> x
+      | Yes, None -> None
+      | Yes, Some (r,_) -> Some r
     in
-    List.map (fun np -> { name = "log_" ^ np.name; f = log np.f }) all
+    {kind=No; name = p.name; f = f p}
+
+  let ln anp =
+    let ln f x = Option.bind (f x) (fun x -> if x <= 0. then None else Some (Float.log x)) in
+    let s = remove_std anp in
+    { kind=No; name = "log_" ^ s.name; f = ln s.f }
 
 end
 open Projectors
@@ -141,36 +179,39 @@ let kmeans epsilon m =
   Array.iteri split_and_save groups
 
 
+
 let () =
   Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
   let log_seq = read_logs !log_files in
   let log = read_log log_seq in
   let m = comparison ~before ~after log in
-  let epsilon = 1e-6 in
   let m = Stat.By_files.filter (fun _k {Stat.ty;nonty; _} -> ty.ref.min > epsilon && nonty.ref.min > epsilon && nonty.main.min > epsilon )
       m
   in
   Stat.save (out_name "by_files.data") m;
-  let points = Array.of_seq @@ Stat.By_files.to_seq m in
+  let points = Stat.By_files.to_seq m in
   let hist_and_quantiles proj =
-    let ordered_points = Stat.order_statistic proj.f points in
+    let points = Seq.filter_map proj.f points in
+    let ordered_points = Stat.order_statistic points in
     let h = Stat.histogram 20 ordered_points in
     let name = out_name (Fmt.str "%s_hist.data" proj.name) in
     Stat.save_histogram name h;
     Stat.save_quantiles (out_name (Fmt.str "%s_quantiles.data" proj.name)) ordered_points;
     Stat.save_quantile_table proj.name (out_name ((Fmt.str "%s_quantile_table.md") proj.name)) ordered_points
   in
-  let () = List.iter hist_and_quantiles Projectors.all in
+  let () = List.iter hist_and_quantiles (List.map remove_std Projectors.all) in
   let report_average ppf np =
-    let average = Seq_average.map_and_compute np.f (Stat.By_files.to_seq m) in
+    let np = remove_std np in
+    let average = Seq_average.compute (Seq.filter_map np.f points) in
     Fmt.pf ppf "average %s: %g@." np.name average
   in
   let report_geometric_average ppf np =
-    let average = Seq_average.map_and_compute np.f (Stat.By_files.to_seq m) in
+    let np = Projectors.ln np in
+    let average = Seq_average.compute (Seq.filter_map np.f points) in
     Fmt.pf ppf "geometric average %s: %g@." np.name (exp average)
   in
   Stat.to_filename (out_name "averages.data") (fun ppf ->
       List.iter (report_average ppf) Projectors.all;
-      List.iter (report_geometric_average ppf) Projectors.logarithmics
+      List.iter (report_geometric_average ppf) Projectors.all
     );
   Stat.to_filename (out_name "pkgs.data") (by_pkg_data (Stat.By_files.to_seq m))
