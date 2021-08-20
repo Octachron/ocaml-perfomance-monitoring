@@ -1,9 +1,34 @@
-# PR 10337 Effect on compilation time of OCaml programs
+# Mesuring the effect of pull requets on the compilation time of OCaml programs
 
-To measure the effect of [#10337](https://github.com/ocaml/ocaml/pull/10337) over the compilation time of OCaml programs,
-I have recently worked on a version of the OCaml compiler that can output the timing information of the compilation
-to a specific directory.
-With this change, installing an opam package with
+The OCaml typechecker is an important piece of the OCaml compiler pipeline which accounts for
+a significant portion of time spent on compiling an OCaml program (see the [appendices](Compilation-profile)).
+
+The code of the typechecker is also quite optimised, sometimes to the detriment of the readability of the code.
+Recently, Jacques Garrigue and Takafumi Saikawa have worked on a series of pull requests to improve the readability
+of the typechecker
+([#10337](https://github.com/ocaml/ocaml/pull/10337), [#10474](https://github.com/ocaml/ocaml/pull/10474), [#10541](https://github.com/ocaml/ocaml/pull/10541)). Unfortunately, those improvements are also expected
+to increase the typechecking time of OCaml programs because they add abstraction barriers, and remove some
+abstraction breaking optimisations.
+
+The effect was particularly pronounced on [#10337](https://github.com/ocaml/ocaml/pull/10337). Due to
+the improvement of the readability of the typechecker, this pull request has been merged after some quick
+tests to check that the compilation time increase was not too dire.
+
+However, the discussion on this pull request highlighted the fact that it was difficult to measure OCaml compilation
+time on a scale large enough to enable good statistical analysis.
+
+Consequently, I decided to try my hand at a statistical analysis of OCaml compilation time, using this pull request
+ [#10337](https://github.com/ocaml/ocaml/pull/10337) as a case study.
+ 
+Before doing any kind of analysis, I need an easy way to collect the data of interest. 
+Fortunately, the OCaml compiler can emit timing information with flag `-dtimings`.
+However, this information is emitted on stdout, whereas my ideal sampling process would be to just pick an opam package,
+launch a build process and recover the timing information for each file.
+
+This doesn't work if the data is sent to the stdout, and never see again.
+The first step is thus to create a version of the OCaml compiler that can output the timing information of the compilation
+to a specific directory
+With this change ([#10575](https://github.com/ocaml/ocaml/pull/10337)), installing an opam package with
 ```bash
 OCAMLPARAM=",_,timings=1,dump-dir= /tmp/pkgnname" opam install pkgname
 ```
@@ -12,8 +37,8 @@ outputs all profiling information to `/tmp/pkgname`.
 This makes it possible to collect large number of data points on compilation times by using opam installation process
 without the need of much glue code.
 
-For the sake of this experiment, I started with 5 core packages `containers`, `dune`, `tyxml`, `coq` and `base`.
-Once their dependencies are added, we end up with
+For this case study, I am using 5 core packages `containers`, `dune`, `tyxml`, `coq` and `base`.
+Once their dependencies are added, I end up with
 
 - ocamlfind
 - num
@@ -39,21 +64,23 @@ slightly more than a week-end of computation.
 
 In order to try to reduce the noise induced by the operating system scheduler, the compilation process was
 run with `OPAMJOBS=1`. Similarly, the compilation process was isolated as much as possible from the other
-process using the `cset` Linux utility to reserve one full physical core to the physical process.
+process using the `cset` Linux utility to reserve one full physical core to the opam processes.
 
 
 ## Comparing averages, files by files
 
 With the data hand, we can compute the average compilation by files, and by stage of the OCaml compiler pipeline.
-In our case we are mostly interested in the typechecking stage, and global compilation time, since #10337 should only
+In our case, we are mostly interested in the typechecking stage, and global compilation time, since #10337 should only
 alters the typechecking times. It is therefore useful to split the compilation time into `typechecking + other=total`.
-Then for each files in the 15 packages above we can can compute the average time for each of those stages and the
+Then for each files in the 15 packages above, I can can compute the average time for each of those stages and the
 relative change of average compilation time: `time after/time before`.
-To avoid noise, we remove files for which the minimal typechecking time is inferior to one microsecond.
 
 Rendering those relative changes for the typechecking time, file by file (with the corresponding 90% confidence interval) yields 
 
 ![Relative change in average typechecking time by files](mean_ratio.svg)
+
+To avoid noise, I have removed files for which the average typechecking time was inferior to one microsecond on
+the reference version of the compiler.
 
 In the graph above, there are few remarkable points:
 
@@ -63,11 +90,11 @@ for those files there was no changes at all of the typechecking times.
 - The standard deviation time varies wildly across packages. The typechecking of some dune files tend to have a
   very high variances. However outside of those files, the standard deviation seems moderate, and the
   mean estimator seem to have converged.
-- We have a handful a files for which the typechecking time more than doubled. However the relative typechecking time
+- For a handful a files for which the typechecking time more than doubled. However the relative typechecking time
   does seem to be confined in the `[1,1.2]` range for a majority of files.
   
 Since the data is quite noisy, it is useful before trying to interpret it to check that we are not looking only at noise.
-Fortunately, we have the data on the time spent outside of the typechecking stage available, and we know that
+Fortunately, we have the data on the time spent outside of the typechecking stage available, and
 those times should be mostly noise. We have thus a baseline, that looks like
 
 ![Relative change in average non-typechecking time by files](other_ratio.svg)
