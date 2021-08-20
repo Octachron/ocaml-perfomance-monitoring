@@ -62,9 +62,9 @@ let dir =  "-output-dir", set data_dir, "output dir"
 let read_logs logs =
   List.fold_left (fun s x -> Seq.append (Log.read x) s) (fun () -> Seq.Nil) logs
 
-let out_name x = match !data_dir with
-  | None -> x
-  | Some dir -> Filename.concat dir x
+let out_name fmt = match !data_dir with
+  | None -> Fmt.str fmt
+  | Some dir -> Fmt.kstr (fun x -> Filename.concat dir x) fmt
 
 let epsilon = 1e-6
 
@@ -180,24 +180,47 @@ let kmeans epsilon m =
 
 
 
+let cloud (type a) m (proj:a named) =
+  let points =
+    let filter (s,_ as x) = Option.map (fun x -> s, x) (proj.f x)  in
+    Seq.filter_map filter (Stat.By_files.to_seq m)
+  in
+  let file_name = out_name "%s_cloud.data" proj.name in
+  let pp_entry ppf (key,(x:a)) = match proj.kind, x with
+    | No, x -> Fmt.pf ppf "%a %g@," Stat.pp_full_key key x
+    | Yes, (mu,sigma) -> Fmt.pf ppf "%a %g %g@," Stat.pp_full_key key mu sigma
+  in
+  let pp_entries ppf = Seq.iter (pp_entry ppf) points in
+  let pp_header ppf = match proj.kind with
+    | Yes -> Fmt.pf ppf "File %s_mean %s_std@," proj.name proj.name
+    | No -> Fmt.pf ppf "File %s_mean@," proj.name
+    in
+    Stat.to_filename file_name (fun ppf ->
+        Fmt.pf ppf "@[<v>%t%t@]@." pp_header pp_entries
+      )
+
+let cloud' m (Any proj) = cloud m proj
+
 let () =
   Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
   let log_seq = read_logs !log_files in
   let log = read_log log_seq in
   let m = comparison ~before ~after log in
+  List.iter (cloud' m) Projectors.all;
   let m = Stat.By_files.filter (fun _k {Stat.ty;nonty; _} -> ty.ref.min > epsilon && nonty.ref.min > epsilon && nonty.main.min > epsilon )
       m
   in
+
   Stat.save (out_name "by_files.data") m;
   let points = Stat.By_files.to_seq m in
   let hist_and_quantiles proj =
     let points = Seq.filter_map proj.f points in
     let ordered_points = Stat.order_statistic points in
     let h = Stat.histogram 20 ordered_points in
-    let name = out_name (Fmt.str "%s_hist.data" proj.name) in
+    let name = out_name  "%s_hist.data" proj.name in
     Stat.save_histogram name h;
-    Stat.save_quantiles (out_name (Fmt.str "%s_quantiles.data" proj.name)) ordered_points;
-    Stat.save_quantile_table proj.name (out_name ((Fmt.str "%s_quantile_table.md") proj.name)) ordered_points
+    Stat.save_quantiles (out_name "%s_quantiles.data" proj.name) ordered_points;
+    Stat.save_quantile_table proj.name (out_name "%s_quantile_table.md" proj.name) ordered_points
   in
   let () = List.iter hist_and_quantiles (List.map remove_std Projectors.all) in
   let report_average ppf np =
