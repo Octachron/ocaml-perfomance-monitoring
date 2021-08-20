@@ -231,10 +231,10 @@ that the empirical minima will converge towards a three-parameter Weibull distri
 (To be completely explicit, we also need to assume some regularity of the distribution around this lower bound too).
 
 This means that the distribution ratio of the empirical minima will not exhibits the infinite moments of the ratio of two Gaussians.
-Without this issue, our estimator should have a lesser variance.
+Without this issue, our estimator should have less variance.
 
 However, we cannot use Gaussian confidence intervals for the empirical minima. Moreover, estimating the confidence interval for the
-Weibull distribution is more complex. Since you are mostly interested in corroborating our previous result, we are bypassing the
+Weibull distribution is more complex. Since we are mostly interested in corroborating our previous result, we are bypassing the
 computation of those confidence intervals.
 
 
@@ -246,7 +246,6 @@ Starting with the minimal typechecking time, we get
 ![Relative change in minimal typechecking time by files](min_ratio.svg)
 
 There are notable differences with the average version:
-- we have far less extreme events: the maximal relative increase of typechecking time is of 60%.
 - a very significant part of our points takes the same time to typecheck before and after #10337
 - there is a discretization effects going on: data points tend to fall on exactly the same value of the ratio
 
