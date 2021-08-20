@@ -1,8 +1,8 @@
-# PR 10337 Effect on compilation time  of OCaml programs
+# PR 10337 Effect on compilation time of OCaml programs
 
-To measure the effect of  [#10337](https://github.com/ocaml/ocaml/pull/10337) over the compilation time of OCaml programs.
-I have recently worked on a version of the OCaml compiler that can  output the timing information of the compilation
-to a specific directory ().
+To measure the effect of [#10337](https://github.com/ocaml/ocaml/pull/10337) over the compilation time of OCaml programs,
+I have recently worked on a version of the OCaml compiler that can output the timing information of the compilation
+to a specific directory.
 With this change, installing an opam package with
 ```bash
 OCAMLPARAM=",_,timings=1,dump-dir= /tmp/pkgnname" opam install pkgname
@@ -10,7 +10,7 @@ OCAMLPARAM=",_,timings=1,dump-dir= /tmp/pkgnname" opam install pkgname
 outputs all profiling information to `/tmp/pkgname`.
 
 This makes it possible to collect large number of data points on compilation times by using opam installation process
-without the need of much glue.
+without the need of much glue code.
 
 For the sake of this experiment, I started with 5 core packages `containers`, `dune`, `tyxml`, `coq` and `base`.
 Once their dependencies are added, we end up with
@@ -31,7 +31,7 @@ Once their dependencies are added, we end up with
 - sexplib0
 - base
 
-Then it is a matter of repeatedly installing those packages, and measuring the compilation times before and after   [#10337](https://github.com/ocaml/ocaml/pull/10337).
+Then it is a matter of repeatedly installing those packages, and measuring the compilation times before and after  [#10337](https://github.com/ocaml/ocaml/pull/10337).
 
 In order to get more reliable statistics on each file, each package was compiled 250 times leading
 to 1,6 millions of data points (available at https://www.polychoron.fr/static/longer_complex.log.xz) after
@@ -103,9 +103,9 @@ We might better served by comparing the geometric average. Indeed, we are compar
 noise. By using the geometric average (which compute the exponential of the arithmetic mean of the logarithms of our ratio), we can
 check that rare events don't have an undue influence on the average. In our case the geometric means looks like
 
-| Typechecking geometric average| Other  geometric average  | Total  geometric average   |
-|-------------------------------|---------------------------|----------------------------|
-| 1.05963                       | 1.01513                   | 1.03215                    |
+| Typechecking geometric average| Other geometric average  | Total geometric average   |
+|-------------------------------|--------------------------|---------------------------|
+| 1.05963                       | 1.01513                  | 1.03215                   |
 
 All geometric averages have decreased compared to the arithmetic means, which is a sign that the compilation
 time distribution is skewed towards high compilation times. However, the changes are small and do not
@@ -203,11 +203,11 @@ However, we can imagine another noise model with a multiplicative noise (due to 
 ```
 observable_compilation_time = scheduling_noise * theoretical_computation_time + noise
 ```
-with both ` scheduling_noise>1` and `noise>1`.  With this model, the expectation of the observable compilation time does not match up with
+with both ` scheduling_noise>1` and `noise>1`. With this model, the expectation of the observable compilation time does not match up with
 the theoretical computation time:
 ```
-E[observable_computation_time] - theoretical_computation_time  = E[(scheduling_noise - 1) * theoretical_computation_time] + E[noise] = 
-    (E[scheduling_noise]-1) * theoretical_computation_time +  E[noise]
+E[observable_computation_time] - theoretical_computation_time =
+  (E[scheduling_noise]-1) * theoretical_computation_time + E[noise]
 ```
 Thus, in this model, the average observable computation time is a structurally biased estimator for the theoretical computation time.
 This bias might be compensated by the fact that we are only looking to ratio.
@@ -260,13 +260,13 @@ and the total compilation time
 ![Relative change in minimal total time by files](min_total_ratio.svg)
 
 but overall the minimal total compilation and non-typechecking time mirrors what we had seen
-with the average. The distribution of the non-typechecking times is maybe  more evenly centred around a ratio of 1.
+with the average. The distribution of the non-typechecking times is maybe more evenly centred around a ratio of 1.
 
 We can have a look at the averages and median (across files) to have more global point of view
 
   |                    | Typechecking | Other   | Total   |
   |--------------------|--------------|---------|---------| 
-  | Average            |  1.06907     | 1.01031 | 1.02901 | 
+  | Average            |  1.06907     | 1.01031 | 1.02901 |
   | Geometric average  |  1.05998     | 1.00672 | 1.0276  |
   | Median             |  1           | 1       | 1       |
 
@@ -345,7 +345,7 @@ mostly reflects the trends set by the typechecking time: 55% of files are unaffe
 
 To sum up, with the available data at hands, it seems sensible to conclude that #10337 resulted in an average increase of
 compilation time of the order of 3%, while the average relative increase of typechecking time is around 6%. Moreover,
-for the most impacted files (at the ninth decile),  the relative increase in compilation time ranges between 10% to 40%.
+for the most impacted files (at the ninth decile), the relative increase in compilation time ranges between 10% to 40%.
 
 ## Appendices
 
@@ -355,7 +355,7 @@ for the most impacted files (at the ninth decile),  the relative increase in com
 Since we have data for both typechecking time and non-typechecking times for a few thousand files, it is interesting
 to check how much time is spent on typechecking. We can start by looking at the data points files by files:
 
-![Relative time spent in typechecking  by files](profile_ratio.svg)
+![Relative time spent in typechecking by files](profile_ratio.svg)
 
 We have here a relatively uniform cloud of points between 20-60% of time spent in typechecking compared to total
 compilation time. This is is reflected on the average and median
@@ -373,7 +373,7 @@ time: in their case, typechecking accounts for most of the work done during comp
 
 This relatively uniform distribution is visible both on the quantiles (with an affine part of the quantiles)
 
-![Quantiles of the relative time spent in typechecking  by files](profile_quantiles.svg)
+![Quantiles of the relative time spent in typechecking by files](profile_quantiles.svg)
 
 | %     |  profile quantiles |
 |-----  |--------------------|
@@ -388,7 +388,7 @@ This relatively uniform distribution is visible both on the quantiles (with an a
 
 and on the histogram of the relative time spent in typechecking
 
-![Histogram of the relative time spent in typechecking  by files](profile_hist.svg)
+![Histogram of the relative time spent in typechecking by files](profile_hist.svg)
 
 
 ### Histograms 
