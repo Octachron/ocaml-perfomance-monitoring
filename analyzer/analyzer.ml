@@ -73,7 +73,7 @@ module Projectors = struct
     | No: float with_std
     | Yes: (float * float) with_std
 
-  type 'a named = { kind:'a with_std; name:string; f: Input.t -> 'a option }
+  type 'a named = { kind:'a with_std; name:string; title:string; f: Input.t -> 'a option }
   type any = Any: 'a named -> any  [@@unboxed]
   let mean (_,{ty;_} : Input.t) =
     let denom = ty.ref.mean.center in
@@ -110,14 +110,14 @@ module Projectors = struct
     else Some (total.main.min /. denom)
   let all =
     [
-      Any {kind=Yes; name="mean"; f=mean} ;
-      Any {kind=Yes; name="other"; f=other};
-      Any {kind=Yes; name="total"; f=total};
-      Any {kind=No; name="profile"; f=ratio};
-      Any {kind=No; name="min"; f=min};
-      Any {kind=No; name="min_other"; f=min_other};
-      Any {kind=No; name="min_total"; f= min_total};
-      Any {kind=No; name="min_profile"; f=min_ratio};
+      Any {kind=Yes; name="mean"; title="Relative change in average typechecking time"; f=mean} ;
+      Any {kind=Yes; name="other"; title="Relative change in average time spent outside of typeching"; f=other};
+      Any {kind=Yes; name="total"; title="Relative change in average total compilation time"; f=total};
+      Any {kind=No; name="profile"; title="Ratio of average typechecking time compared to average total compilation time"; f=ratio};
+      Any {kind=No; name="min"; title="Relative change in minimal typechecking time"; f=min};
+      Any {kind=No; name="min_other"; title="Relative change in minimal time spent outside of typeching"; f=min_other};
+      Any {kind=No; name="min_total"; title="Relative change in minimal total compilation time"; f= min_total};
+      Any {kind=No; name="min_profile"; title="Ratio of minimal typechecking time compared to minimal total compilation time"; f=min_ratio};
     ]
 
 
@@ -128,17 +128,17 @@ module Projectors = struct
       | Yes, None -> None
       | Yes, Some (r,_) -> Some r
     in
-    {kind=No; name = p.name; f = f p}
+    {kind=No; name = p.name; title =""; f = f p}
 
   let ln anp =
     let ln f x = Option.bind (f x) (fun x -> if x <= 0. then None else Some (Float.log x)) in
     let s = remove_std anp in
-    { kind=No; name = "log_" ^ s.name; f = ln s.f }
+    { kind=No; name = "log_" ^ s.name; title=""; f = ln s.f }
 
 end
 open Projectors
 
-let by_pkg_data seq ppf =
+let by_pkg_data seq =
   let by_pkg = Stat.By_pkg.empty in
   let add key _data m =
     let key = key.Data.pkg in
@@ -150,14 +150,18 @@ let by_pkg_data seq ppf =
     Stat.By_pkg.add key value m
   in
   let m = Seq.fold_left (fun m (key,data) -> add key data m) by_pkg seq in
-  let pp ppf (key,x,s) = Fmt.pf ppf "%s %d %d@." key x s in
   let rec cumulative s seq () = match seq () with
     | Seq.Nil -> Seq.Nil
     | Seq.Cons( (key,x), r ) ->
       let s = x + s in
       Seq.Cons( (key,x,s), cumulative s r )
   in
-  Seq.iter (pp ppf) (cumulative 0 @@ Stat.By_pkg.to_seq m)
+  Array.of_seq (cumulative 0 @@ Stat.By_pkg.to_seq m)
+
+let global_by_pkg_data seq ppf =
+  let a = by_pkg_data seq in
+  let pp ppf (key,x,s) = Fmt.pf ppf "%s %d %d@." key x s in
+  Array.iter (pp ppf) a
 
 let kmeans epsilon m =
   Random.self_init ();
@@ -179,12 +183,58 @@ let kmeans epsilon m =
   Array.iteri split_and_save groups
 
 
+let cloud_plot (type a) (ymin,ymax) pkgs (proj: a named) ppf =
+  let tics ppf (pkg,n,pos) =  Fmt.pf ppf "%S %d" pkg (pos - n/2) in
+  let comma ppf () = Fmt.pf ppf "," in
+  let x2tics = Fmt.array (fun ppf (_pkg,_n,pos) -> Fmt.int ppf pos)  ~sep:comma in
+  let xtics = Fmt.seq tics ~sep:comma in
+  let large_pkgs = Seq.filter (fun (_,n,_) -> n >= 30) @@ Array.to_seq pkgs in
+  let plot ppf (proj: a named) =
+    match proj.kind with
+    | Yes -> Fmt.pf ppf {|plot "%s_cloud.data" u 0:2:3 w yerrorbars pt 0 title ""|} proj.name
+    | No -> Fmt.pf ppf {|plot "%s_cloud.data" u 0:2 w p pt 0 title ""|} proj.name
+  in
+  let yrange ppf =
+    if proj.name ="profile" then
+      Fmt.pf ppf {|set yrange [0:1]|}
+    else
+      Fmt.pf ppf {|set yrange [%g:%g]|} (max 0.5 ymin) (Float.min 2.0 ymax)
+  in
+  Fmt.pf ppf
+{|set title "%s time: after/before"
+set xtics rotate by -45
+set output "%s_ratio.svg"
+set term svg
+
+set grid x2tics
+set x2tics (%a) format "" scale 0
+
+set xtics (%a) format "" scale 0
+
+set ylabel "after/before"
+set xlabel "files"
+
+set bars 0
+set grid y my
+%t
+
+%a|}
+proj.title proj.name
+x2tics pkgs
+xtics large_pkgs
+yrange
+plot proj
 
 let cloud (type a) m (proj:a named) =
   let points =
     let filter (s,_ as x) = Option.map (fun x -> s, x) (proj.f x)  in
     Seq.filter_map filter (Stat.By_files.to_seq m)
   in
+  let range (mn,mx) (_,(x:a)) : float * float = match proj.kind, x with
+    | No, x -> (Float.min x mn, Float.max x mx)
+    | Yes, (x,_) -> (Float.min x mn, Float.max x mx)
+  in
+  let range = Seq.fold_left range (1./.0., -1./.0.) points in
   let file_name = out_name "%s_cloud.data" proj.name in
   let pp_entry ppf (key,(x:a)) = match proj.kind, x with
     | No, x -> Fmt.pf ppf "%a %g@," Stat.pp_full_key key x
@@ -197,7 +247,9 @@ let cloud (type a) m (proj:a named) =
     in
     Stat.to_filename file_name (fun ppf ->
         Fmt.pf ppf "@[<v>%t%t@]@." pp_header pp_entries
-      )
+      );
+    let pkgs = by_pkg_data points in
+    Stat.to_filename (out_name "%s_cloud.plot" proj.name) (cloud_plot range pkgs proj)
 
 let cloud' m (Any proj) = cloud m proj
 
@@ -237,4 +289,4 @@ let () =
       List.iter (report_average ppf) Projectors.all;
       List.iter (report_geometric_average ppf) Projectors.all
     );
-  Stat.to_filename (out_name "pkgs.data") (by_pkg_data (Stat.By_files.to_seq m))
+  Stat.to_filename (out_name "pkgs.data") (global_by_pkg_data (Stat.By_files.to_seq m))
