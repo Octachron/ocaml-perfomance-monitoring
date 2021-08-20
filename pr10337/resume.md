@@ -90,13 +90,14 @@ And this is reflected in the averages:
 
 | Typechecking average | Other average  | Total average |
 |----------------------|----------------|---------------|
-| 1.06658              | 1.01677        |   1.03288     |
+| 1.06641              | 1.01756        |   1.03307     |
 
-We have thus an increase of around 6.7% of typechecking time which translates to an increase of 3.3% of total time.
+We have thus an increase of around 6.6% of typechecking time which translates to an increase of 3.3% of total time.
 However, the non-typechecking time also increased by 1.7% in average. Our average is thus either tainted by
 some structural bias or the relative variance (mean/ratio) is still enough for the distribution of the ratio to be ill-behaved
-(literature seems to indicate that a relative variance < 10% is required for the ratio to be Gaussian-like). Anyway, we probably cannot
-count on a precision of more than 1.7% . Even with this caveat, we still have a visible effect on the total compilation time.
+(literature seems to indicate that a relative variance < 10% is required for the distribution of ratio to be Gaussian-like).
+Anyway, we probably cannot count on a precision of more than 1.7%.
+Even with this caveat, we still have a visible effect on the total compilation time.
 
 We might better served by comparing the geometric average. Indeed, we are comparing ratio of time, with possibly a heavy-tailed
 noise. By using the geometric average (which compute the exponential of the arithmetic mean of the logarithms of our ratio), we can
@@ -104,7 +105,7 @@ check that rare events don't have an undue influence on the average. In our case
 
 | Typechecking geometric average| Other  geometric average  | Total  geometric average   |
 |-------------------------------|---------------------------|----------------------------|
-| 1.05977                       | 1.0136                    | 1.03193                    |
+| 1.05963                       | 1.01513                   | 1.03215                    |
 
 All geometric averages have decreased compared to the arithmetic means, which is a sign that the compilation
 time distribution is skewed towards high compilation times. However, the changes are small and do not
@@ -115,9 +116,9 @@ We can somewhat refine those observations by looking at the medians (which are e
 
 | Typechecking median | Other median | Total media |
 |---------------------|--------------|-------------|
-| 1.03843             | 1.0085       |  1.02506    |
+| 1.03834             | 1.00852      |  1.02507    |
 
-Here, the non-typechecking times seems far less affected by the structural bias (with an increase of 0.8%) whereas the increase
+Here, the non-typechecking times seems far less affected by the structural bias (with an increase of 0.9%) whereas the increase
 of typechecking time and total compilation time are reduced but still here at 3.8% and 2.5% respectively.
 
 
@@ -133,9 +134,9 @@ We can refine our analysis by looking at the quantiles of this relative changes 
 | 1%    | 0.875097       |
 | 10%   | 1              |
 | 25%   | 1.001          |
-| 50%   | 1.03843        |
-| 75%   | 1.08837        |
-| 90%   | 1.163          |
+| 50%   | 1.03834        |
+| 75%   | 1.08826        |
+| 90%   | 1.162          |
 | 99%   | 1.51411        |
 | 99.9% | 2.76834        |
 
@@ -149,10 +150,10 @@ However, looking at the total compilation does seems to reduce the overall impac
 
 | %     | total quantiles |
 |-------|-----------------|
-| 1%    | 0.944124        |
+| 1%    | 0.945555        |
 | 10%   | 1               |
-| 25%   | 1.00693         |
-| 50%   | 1.02506         |
+| 25%   | 1.00707         |
+| 50%   | 1.02507         |
 | 75%   | 1.05            |
 | 90%   | 1.07895         |
 | 99%   | 1.17846         |
@@ -167,10 +168,10 @@ We can also have a quick look at the quantiles for the non-typechecking time
 
 | %     | other quantiles |
 |-------|-----------------|
-| 1%    | 0.837892        |
-| 10%   | 0.955752        |
-| 25%   | 0.994896        |
-| 50%   | 1.0085          |
+| 1%    | 0.855129        |
+| 10%   | 0.956174        |
+| 25%   | 0.995239        |
+| 50%   | 1.00852         |
 | 75%   | 1.03743         |
 | 90%   | 1.08618         |
 | 99%   | 1.25541         |
@@ -265,8 +266,8 @@ We can have a look at the averages and median (across files) to have more global
 
   |                    | Typechecking | Other   | Total   |
   |--------------------|--------------|---------|---------| 
-  | Average            |  1.06895     | 1.00857 | 1.03288 | 
-  | Geometric average  |  1.05987     | 1.0067  | 1.02738 |
+  | Average            |  1.06907     | 1.01031 | 1.02901 | 
+  | Geometric average  |  1.05998     | 1.00672 | 1.0276  |
   | Median             |  1           | 1       | 1       |
 
 A striking change is that the median for the typechecking and total compilation time is equal to one:
@@ -304,6 +305,7 @@ in our experiment is unchanged. For 40% of the files, the increase is less than 
 an increase of 100% of the typechecking time. On the higher quantiles, the presence of multiple jumps is the consequence of
 the discretization of ratio that was already visible on the raw data. 
 
+
 When looking at the time spent outside of typechecking, 
 
 ![Quantiles of the relative change in minimal non-typechecking time by files](min_other_quantiles.svg)
@@ -311,7 +313,7 @@ When looking at the time spent outside of typechecking,
 | %     |  min_other quantiles |
 |-------|----------------------|
 | 1%    | 0.8                  |
-| 10%   | 0.944444             |
+| 10%   | 0.947368             |
 | 25%   | 1                    |
 | 50%   | 1                    |
 | 75%   | 1                    |
@@ -326,7 +328,7 @@ The quantiles for the total compilation time,
 
 | %     |  min_total quantiles |
 |-------|----------------------|
-| 1%    | 0.909091             |
+| 1%    | 0.92                 |
 | 10%   | 1                    |
 | 25%   | 1                    |
 | 50%   | 1                    |
@@ -356,7 +358,15 @@ to check how much time is spent on typechecking. We can start by looking at the 
 ![Relative time spent in typechecking  by files](profile_ratio.svg)
 
 We have here a relatively uniform cloud of points between 20-60% of time spent in typechecking compared to total
-compilation time. However, we have a clear cluster of files for which typechecking accounts for 90% of the total compilation
+compilation time. This is is reflected on the average and median
+
+| Arithmetic average  | Median       |
+|---------------------|--------------|
+| 38.8827%            | 39.7336%     |
+
+Both value are quite comparable, the distribution doesn't seem significantly skewed.
+
+However, we have a clear cluster of files for which typechecking accounts for 90% of the total compilation
 time. Interestingly, this cluster of points corresponds to the dune cluster of files with a very variance that we had identified
 earlier. This explains why those files have essentially the same profile when looking at the total and typechecking compilation
 time: in their case, typechecking accounts for most of the work done during compilation.
@@ -368,13 +378,13 @@ This relatively uniform distribution is visible both on the quantiles (with an a
 | %     |  profile quantiles |
 |-----  |--------------------|
 | 1%    | 0.111556           |
-| 10%   | 0.165447           |
-| 25%   | 0.283435           |
-| 50%   | 0.397314           |
-| 75%   | 0.488415           |
-| 90%   | 0.57464            |
-| 99%   | 0.756093           |
-| 99.9% | 0.920419           |
+| 10%   | 0.16431            |
+| 25%   | 0.283249           |
+| 50%   | 0.397336           |
+| 75%   | 0.487892           |
+| 90%   | 0.573355           |
+| 99%   | 0.749689           |
+| 99.9% | 0.913336           |
 
 and on the histogram of the relative time spent in typechecking
 
