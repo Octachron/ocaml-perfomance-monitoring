@@ -1,7 +1,7 @@
 # Mesuring the effect of pull requets on the compilation time of OCaml programs
 
 The OCaml typechecker is an important piece of the OCaml compiler pipeline which accounts for
-a significant portion of time spent on compiling an OCaml program (see the [appendices](Compilation-profile)).
+a significant portion of time spent on compiling an OCaml program (see the [appendices](#Compilation-profile)).
 
 The code of the typechecker is also quite optimised, sometimes to the detriment of the readability of the code.
 Recently, Jacques Garrigue and Takafumi Saikawa have worked on a series of pull requests to improve the readability
@@ -10,23 +10,23 @@ of the typechecker
 to increase the typechecking time of OCaml programs because they add abstraction barriers, and remove some
 abstraction breaking optimisations.
 
-The effect was particularly pronounced on [#10337](https://github.com/ocaml/ocaml/pull/10337). Due to
+The effect is particularly pronounced on [#10337](https://github.com/ocaml/ocaml/pull/10337). Due to
 the improvement of the readability of the typechecker, this pull request has been merged after some quick
 tests to check that the compilation time increase was not too dire.
 
 However, the discussion on this pull request highlighted the fact that it was difficult to measure OCaml compilation
-time on a scale large enough to enable good statistical analysis.
+time on a scale large enough to enable good statistical analysis and that it would be useful.
 
 Consequently, I decided to try my hand at a statistical analysis of OCaml compilation time, using this pull request
- [#10337](https://github.com/ocaml/ocaml/pull/10337) as a case study.
+ [#10337](https://github.com/ocaml/ocaml/pull/10337) as a case study. Beyond this specific PR, I think that it is 
+ interesting to write down a process and a handful of tools for measuring OCaml compilation time on the opam ecosystem.
  
-Before doing any kind of analysis, I need an easy way to collect the data of interest. 
+Before doing any kind of analysis, the first step is to find an easy way to collect the data of interest. 
 Fortunately, the OCaml compiler can emit timing information with flag `-dtimings`.
 However, this information is emitted on stdout, whereas my ideal sampling process would be to just pick an opam package,
 launch a build process and recover the timing information for each file.
-
 This doesn't work if the data is sent to the stdout, and never see again.
-The first step is thus to create a version of the OCaml compiler that can output the timing information of the compilation
+This first step is thus to create a version of the OCaml compiler that can output the timing information of the compilation
 to a specific directory
 With this change ([#10575](https://github.com/ocaml/ocaml/pull/10337)), installing an opam package with
 ```bash
@@ -62,7 +62,7 @@ In order to get more reliable statistics on each file, each package was compiled
 to 1,6 millions of data points (available at https://www.polychoron.fr/static/longer_complex.log.xz) after
 slightly more than a week-end of computation.
 
-In order to try to reduce the noise induced by the operating system scheduler, the compilation process was
+In order to try to reduce the noise induced by the operating system scheduler, the compilation process is
 run with `OPAMJOBS=1`. Similarly, the compilation process was isolated as much as possible from the other
 process using the `cset` Linux utility to reserve one full physical core to the opam processes.
 
@@ -72,7 +72,7 @@ process using the `cset` Linux utility to reserve one full physical core to the 
 With the data hand, we can compute the average compilation by files, and by stage of the OCaml compiler pipeline.
 In our case, we are mostly interested in the typechecking stage, and global compilation time, since #10337 should only
 alters the typechecking times. It is therefore useful to split the compilation time into `typechecking + other=total`.
-Then for each files in the 15 packages above, I can can compute the average time for each of those stages and the
+Then for each files in the 15 packages above, we can can compute the average time for each of those stages and the
 relative change of average compilation time: `time after/time before`.
 
 Rendering those relative changes for the typechecking time, file by file (with the corresponding 90% confidence interval) yields 
@@ -119,8 +119,8 @@ And this is reflected in the averages:
 |----------------------|----------------|---------------|
 | 1.06641              | 1.01756        |   1.03307     |
 
-We have thus an increase of around 6.6% of typechecking time which translates to an increase of 3.3% of total time.
-However, the non-typechecking time also increased by 1.7% in average. Our average is thus either tainted by
+There is thus an increase of around 6.6% of typechecking time which translates to an increase of 3.3% of total time.
+However, the non-typechecking time also increased by 1.7% in average. The average is thus either tainted by
 some structural bias or the relative variance (mean/ratio) is still enough for the distribution of the ratio to be ill-behaved
 (literature seems to indicate that a relative variance < 10% is required for the distribution of ratio to be Gaussian-like).
 Anyway, we probably cannot count on a precision of more than 1.7%.
