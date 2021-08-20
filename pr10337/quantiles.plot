@@ -11,7 +11,7 @@ set grid x mx
 set yrange [0.8:1.6]
 
 set xlabel "Quantiles"
-set ylabel "after/before %"
+set ylabel "after/before"
 
 set output "mean_quantiles.svg"
 plot "mean_quantiles.data" u 2:1 t "CDF" w l
