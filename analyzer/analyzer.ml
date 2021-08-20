@@ -201,7 +201,7 @@ let cloud_plot (type a) (ymin,ymax) pkgs (proj: a named) ppf =
       Fmt.pf ppf {|set yrange [%g:%g]|} (max 0.5 ymin) (Float.min 2.0 ymax)
   in
   Fmt.pf ppf
-{|set title "%s time: after/before"
+{|set title "%s"
 set xtics rotate by -45
 set output "%s_ratio.svg"
 set term svg
