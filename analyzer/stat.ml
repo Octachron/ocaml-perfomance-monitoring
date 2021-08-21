@@ -402,17 +402,25 @@ module Convex_from_vec(V:Vec) = struct
 end
 
 
-type ordered = Ordered of float array [@@unboxed]
+module Q = struct
+  type t = { key:Data.file; value:float }
+  let value q = q.value
+  let compare x y = compare x.value y.value
+  let key x = x.key
+  let pp ppf q = Fmt.pf ppf "%g %a" q.value pp_full_key q.key
+end
+type ordered = Ordered of Q.t array [@@unboxed]
+
 
 let order_statistic all =
   let all = Array.of_seq all in
-  let () = Array.sort compare all in
+  let () = Array.sort Q.compare all in
   Ordered all
 
 let quantile (Ordered ordered_points) i = ordered_points.( int_of_float @@ i *. float (Array.length ordered_points)  )
 
 let quantiles_table name ordered_points ppf =
-  let row ppf i = Fmt.pf ppf "| %g%% | %g |@," (100. *. i) (quantile ordered_points i) in
+  let row ppf i = Fmt.pf ppf "| %g%% | %g |@," (100. *. i) (Q.value @@ quantile ordered_points i) in
   Fmt.pf ppf "@[<v>\
               | %% |  %s quantiles      |@,\
               |---|--------------------|@,"
@@ -424,10 +432,15 @@ let quantiles_table name ordered_points ppf =
 
 let quantiles_data (Ordered ordered_points) ppf =
   Array.iteri
-    (fun i x -> Fmt.pf ppf "%g %g@." x ((100. *. float i) /. float (Array.length ordered_points)))
+    (fun i x -> Fmt.pf ppf "%g %g %a@."
+        (Q.value x)
+        ((100. *. float i) /. float (Array.length ordered_points))
+        pp_full_key (Q.key x)
+    )
     ordered_points
 
 let histogram nbins (Ordered ordered_points) =
+  let ordered_points = Array.map Q.value ordered_points in
   let npoints = Array.length ordered_points in
   let size =  npoints / nbins in
   let rest = npoints - nbins * size in

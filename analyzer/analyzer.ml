@@ -253,6 +253,10 @@ let cloud (type a) m (proj:a named) =
 
 let cloud' m (Any proj) = cloud m proj
 
+
+let with_key f (key,_ as x) =
+  Option.map (fun value -> {Stat.Q.key; value}) (f x)
+
 let () =
   Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
   let log_seq = read_logs !log_files in
@@ -266,7 +270,7 @@ let () =
   Stat.save (out_name "by_files.data") m;
   let points = Stat.By_files.to_seq m in
   let hist_and_quantiles proj =
-    let points = Seq.filter_map proj.f points in
+    let points = Seq.filter_map (with_key proj.f) points in
     let ordered_points = Stat.order_statistic points in
     let h = Stat.histogram 20 ordered_points in
     let name = out_name  "%s_hist.data" proj.name in
