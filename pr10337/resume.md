@@ -1,14 +1,14 @@
 # Mesuring the effect of pull requets on the compilation time of OCaml programs
 
 The OCaml typechecker is an important piece of the OCaml compiler pipeline which accounts for
-a significant portion of time spent on compiling an OCaml program (see the [appendices](#Compilation-profile)).
+a significant portion of time spent on compiling an OCaml program (see the [appendices](#compilation-profile)).
 
 The code of the typechecker is also quite optimised, sometimes to the detriment of the readability of the code.
 Recently, Jacques Garrigue and Takafumi Saikawa have worked on a series of pull requests to improve the readability
 of the typechecker
 ([#10337](https://github.com/ocaml/ocaml/pull/10337), [#10474](https://github.com/ocaml/ocaml/pull/10474), [#10541](https://github.com/ocaml/ocaml/pull/10541)). Unfortunately, those improvements are also expected
-to increase the typechecking time of OCaml programs because they add abstraction barriers, and remove some
-abstraction breaking optimisations.
+to increase the typechecking time of OCaml programs because they add abstraction barriers,
+and remove some optimisations that were breaking the abstraction barriers.
 
 The effect is particularly pronounced on [#10337](https://github.com/ocaml/ocaml/pull/10337). Due to
 the improvement of the readability of the typechecker, this pull request has been merged after some quick
@@ -26,16 +26,15 @@ Fortunately, the OCaml compiler can emit timing information with flag `-dtimings
 However, this information is emitted on stdout, whereas my ideal sampling process would be to just pick an opam package,
 launch a build process and recover the timing information for each file.
 This doesn't work if the data is sent to the stdout, and never see again.
-This first step is thus to create a version of the OCaml compiler that can output the timing information of the compilation
-to a specific directory
-With this change ([#10575](https://github.com/ocaml/ocaml/pull/10337)), installing an opam package with
+This first step is thus to create a version of the OCaml compiler that can output the timing information of the compilation to a specific directory.
+With this change ([#10575](https://github.com/ocaml/ocaml/pull/10575)), installing an opam package with
 ```bash
 OCAMLPARAM=",_,timings=1,dump-dir= /tmp/pkgnname" opam install pkgname
 ```
 outputs all profiling information to `/tmp/pkgname`.
 
-This makes it possible to collect large number of data points on compilation times by using opam installation process
-without the need of much glue code.
+This makes it possible to collect large number of data points on compilation times by using opam, and the canonical installation process of each package without the need of much
+glue code.
 
 For this case study, I am using 5 core packages `containers`, `dune`, `tyxml`, `coq` and `base`.
 Once their dependencies are added, I end up with
@@ -59,7 +58,7 @@ Once their dependencies are added, I end up with
 Then it is a matter of repeatedly installing those packages, and measuring the compilation times before and after  [#10337](https://github.com/ocaml/ocaml/pull/10337).
 
 In order to get more reliable statistics on each file, each package was compiled 250 times leading
-to 1,6 millions of data points (available at https://www.polychoron.fr/static/longer_complex.log.xz) after
+to 1,6 millions of data points (available [here](/static/longer_complex.log.xz)) after
 slightly more than a week-end of computation.
 
 In order to try to reduce the noise induced by the operating system scheduler, the compilation process is
@@ -69,13 +68,13 @@ process using the `cset` Linux utility to reserve one full physical core to the 
 
 ## Comparing averages, files by files
 
-With the data hand, we can compute the average compilation by files, and by stage of the OCaml compiler pipeline.
+With the data at hand, we can compute the average compilation by files, and by stage of the OCaml compiler pipeline.
 In our case, we are mostly interested in the typechecking stage, and global compilation time, since #10337 should only
-alters the typechecking times. It is therefore useful to split the compilation time into `typechecking + other=total`.
+alter the time spent on typechecking. It is therefore useful to split the compilation time into `typechecking + other=total`.
 Then for each files in the 15 packages above, we can can compute the average time for each of those stages and the
 relative change of average compilation time: `time after/time before`.
 
-Rendering those relative changes for the typechecking time, file by file (with the corresponding 90% confidence interval) yields 
+Rendering those relative changes for the typechecking time, file by file (with the corresponding 90% confidence interval) yields
 
 ![Relative change in average typechecking time by files](mean_ratio.svg)
 
@@ -92,7 +91,7 @@ for those files there was no changes at all of the typechecking times.
   mean estimator seem to have converged.
 - For a handful a files for which the typechecking time more than doubled. However the relative typechecking time
   does seem to be confined in the `[1,1.2]` range for a majority of files.
-  
+
 Since the data is quite noisy, it is useful before trying to interpret it to check that we are not looking only at noise.
 Fortunately, we have the data on the time spent outside of the typechecking stage available, and
 those times should be mostly noise. We have thus a baseline, that looks like
@@ -105,11 +104,11 @@ This means that our hypothesis that the compilation time outside of the typechec
 is not visibly invalidated by our data points. An other interesting point is that the high variance points seems to be
 shared between the typechecking and other graphs.
 
-We can even checks on the graphs for the average total compilation (files by files)
+We can even check on the graphs for the average total compilation (file by file)
 
 ![Relative change in average total time by files](total_ratio.svg)
 
-that those points still have a high variances here. However, outside of this cluster of points, we have a quite more
+that those points still have a high variance here. However, outside of this cluster of points, we have a quite more
 compact distribution of points for the total compilation time: it seems that we have a quite consistent increase of the
 total compilation time of around 3%.
 
@@ -151,8 +150,7 @@ of typechecking time and total compilation time are reduced but still here at 3.
 
 ## Comparing averages, quantiles
 
-
-We can refine our analysis by looking at the quantiles of this relative changes of compilation time
+We can refine our analysis by looking at the quantiles of those relative changes of compilation time
 
 ![Quantiles of the relative change of average typechecking time by files](mean_quantiles.svg)
 
@@ -230,7 +228,7 @@ However, we can imagine another noise model with a multiplicative noise (due to 
 ```
 observable_compilation_time = scheduling_noise * theoretical_computation_time + noise
 ```
-with both ` scheduling_noise>1` and `noise>1`. With this model, the expectation of the observable compilation time does not match up with
+with both `scheduling_noise>1` and `noise>1`. With this model, the expectation of the observable compilation time does not match up with
 the theoretical computation time:
 ```
 E[observable_computation_time] - theoretical_computation_time =
@@ -242,7 +240,7 @@ Nevertheless, this model also induces a second source of variance
 ```
 Var[observable_computation_time] = theoretical_computation_time^2 Var[scheduling_noise] + Var[noise]
 ```
-(assuming the two noises are not correlated), and this variance increases with the theoretical computation time.
+(/assuming the two noises are not correlated), and this variance increases with the theoretical computation time.
 This relative standard deviation might be problematic when computing ratio.
 
 If this second noise model is closer to reality, using the empirical average estimators might be not ideal.
