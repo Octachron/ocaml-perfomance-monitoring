@@ -1,4 +1,4 @@
-(executable
+(library
  (name runner)
  (libraries unix fmt lib)
 )

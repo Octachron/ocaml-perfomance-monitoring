@@ -66,28 +66,18 @@ let start ~n ~switches ~log ~context ~pkgs =
   let experiment switch = pkg_line ~switch ~log n pkgs in
   List.iter experiment switches
 
-let before = "Octachron-ocaml-before-pr10337+dump-dir"
-let after = "Octachron-ocaml-pr10337+dump-dir"
-
-let simple = [ "ocamlfind"; "num"; "zarith" ]
-let hard =
-  [ "ocamlfind"; "num"; "zarith"; "seq"; "containers"; "coq"; "dune"; "re";
-    "ocamlbuild"; "uchar"; "topkg"; "uutf"; "tyxml";
-    "sexplib0"; "base"
-  ]
-
 let with_file filename f =
   let x = open_out filename in
   let ppf = Format.formatter_of_out_channel x in
   Fun.protect (fun () -> f ppf)
     ~finally:(fun () -> close_out x)
 
-let () =
-  let log = "log" in
+let run ~n ~log ~switches ~context ~pkgs =
   with_file log (fun log ->
       start ~log
-        ~n:4
-        ~switches:[before;after]
-        ~context:[]
-        ~pkgs:simple
+        ~n
+        ~switches
+        ~context
+        ~pkgs
     )
+
