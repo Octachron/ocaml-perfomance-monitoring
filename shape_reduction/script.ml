@@ -3,7 +3,7 @@ let from_branch name = Format.asprintf "Octachron-ocaml-%s" name
 
 let reverted = from_branch "shape_reverted"
 
-let simple = List.map OpamFormula.atom_of_string [ "ocamlfind"; "num" ]
+let simple = [ "ocamlfind"; "num" ]
 
 let () = Runner.run
 ~n:2

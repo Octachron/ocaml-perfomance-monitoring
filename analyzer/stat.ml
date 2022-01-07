@@ -14,16 +14,42 @@ end
 module By_files = Map.Make(File_key)
 module By_pkg = Map.Make(String)
 
-module Stat(O:observable with type sample = Data.times) = struct
+module Time_stat(O:observable with type sample = Data.times) = struct
+  type sample = Data.entry_type
+  type t = O.t By_files.t
   let empty = By_files.empty
-  let add {Data.switch=_; key; time;total_time} m =
-    let observation : Data.times = { typechecking=time; total=total_time } in
-    match By_files.find key m with
-    | exception Not_found -> By_files.add key (O.singleton observation) m
-    | observable -> By_files.add key O.(add observation observable) m
+  let add x m =
+    match x with
+    | Data.File_size _ -> m
+    | Data.Compilation_profile {origin; key; value=observation} ->
+      let key = {Data.pkg=origin.pkg; name=key} in
+      match By_files.find key m with
+      | exception Not_found -> By_files.add key (O.singleton observation) m
+      | observable -> By_files.add key O.(add observation observable) m
 
   let add_list ls o = List.fold_left (fun acc x -> add x acc) o ls
+  let singleton x = add x empty
+
 end
+
+module Filesize_stat(O:observable with type sample = Data.filesize) = struct
+  type sample = Data.entry_type
+  type t = O.t By_files.t
+  let empty = By_files.empty
+  let add x  m =
+    match x with
+    | Data.Compilation_profile _ -> m
+    | Data.File_size {origin; key; value=observation} ->
+      let key = {Data.pkg=origin.pkg; name=key} in
+      match By_files.find key m with
+      | exception Not_found -> By_files.add key (O.singleton observation) m
+      | observable -> By_files.add key O.(add observation observable) m
+
+  let add_list ls o = List.fold_left (fun acc x -> add x acc) o ls
+  let singleton x = add x empty
+
+end
+
 
 module List_observable = struct
   type sample = Data.times
@@ -33,7 +59,7 @@ module List_observable = struct
   let empty = []
 end
 
-module Ls = Stat(List_observable)
+module Ls = Time_stat(List_observable)
 
 
 module type Vec = sig

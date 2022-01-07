@@ -1,15 +1,23 @@
 module Db = Map.Make(String)
 
-let read_log_entry db (x:Data.file Data.typechecking_stat) =
-  let switch_stat =
-    match Db.find x.switch db with
-    | x -> x
-    | exception Not_found -> Stat.Ls.empty
-  in
-  Db.add x.switch (Stat.Ls.add x switch_stat) db
+module Observable_reader(O:Stat.observable with type sample = Data.entry_type) = struct
+  let read db (x:Data.entry_type) =
+    let switch = match x with
+      | Compilation_profile x -> x.origin.switch
+      | File_size x -> x.origin.switch
+    in
+    let switch_stat =
+      match Db.find switch db with
+      | x -> x
+      | exception Not_found -> O.empty
+    in
+    Db.add switch (O.add x switch_stat) db
+end
+
+module Time_reader = Observable_reader(Stat.Ls)
 
 let read_log log_seq =
-  Seq.fold_left read_log_entry Db.empty log_seq
+  Seq.fold_left Time_reader.read Db.empty log_seq
 
 
 module C = Stat.Convex_from_vec(Stat.R3)

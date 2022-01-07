@@ -1,11 +1,29 @@
-let fmt: _ format6 = "%s %s %s %g %g"
+let profile_fmt: _ format6  = "Profile %s %s %s %g %g"
+let filesize_fmt: _ format6 = "Filesize %s %s %s %s %d"
 
-let write_entry ppf (x:Data.file Data.typechecking_stat) =
-  Fmt.pf ppf fmt x.switch x.key.pkg x.key.name x.time x.total_time;
-  Fmt.pf ppf "@."
+
+let write_entry ppf = function
+  | Data.Compilation_profile x ->
+    Fmt.pf ppf profile_fmt x.origin.switch x.origin.pkg x.key x.value.typechecking x.value.total;
+    Fmt.pf ppf "@."
+  | Data.File_size x ->
+    Fmt.pf ppf filesize_fmt x.origin.switch x.origin.pkg x.key (Data.file_type_extension x.value.kind) x.value.size;
+    Fmt.pf ppf "@."
+
 
 let scan_entry s =
-  Scanf.sscanf s fmt (fun switch pkg name time total_time -> { Data.switch; key = {Data.pkg; name}; time; total_time })
+  try Scanf.sscanf s profile_fmt (fun switch pkg name typechecking total ->
+      Data.Compilation_profile { Data.origin={switch; pkg }; key = name; value={typechecking;total} }
+    )
+  with Scanf.Scan_failure  _ ->
+    Scanf.sscanf s filesize_fmt (fun switch pkg name kind size ->
+        let kind = match Data.classify_file_type kind with
+          | Some x -> x
+          | None -> failwith "format error: unknown file kind"
+        in
+      Data.File_size { Data.origin={switch; pkg }; key = name; value={kind;size} }
+    )
+
 
 let write_many ppf x = List.iter (write_entry ppf) x
 

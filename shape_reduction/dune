@@ -1,1 +1,1 @@
-(executable (name script) (libraries runner opam-client))
+(executable (name script) (libraries runner))
