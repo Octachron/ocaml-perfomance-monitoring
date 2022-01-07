@@ -1,16 +1,13 @@
 
-let before = "Octachron-ocaml-before-pr10337+dump-dir"
-let after = "Octachron-ocaml-pr10337+dump-dir"
+let from_branch name = Format.asprintf "Octachron-ocaml-%s" name
 
-let simple = [ "ocamlfind"; "num"; "zarith" ]
-let hard =
-  [ "ocamlfind"; "num"; "zarith"; "seq"; "containers"; "coq"; "dune"; "re";
-    "ocamlbuild"; "uchar"; "topkg"; "uutf"; "tyxml";
-    "sexplib0"; "base"
-  ]
+let reverted = from_branch "shape_reverted"
+
+let simple = List.map OpamFormula.atom_of_string [ "ocamlfind"; "num" ]
 
 let () = Runner.run
-~n:4
-~switches:[before;after]
+~n:2
+~switches:[reverted]
 ~context:[]
 ~pkgs:simple
+~log:"shape_test"

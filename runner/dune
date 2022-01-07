@@ -1,4 +1,4 @@
 (library
  (name runner)
- (libraries unix fmt lib)
+ (libraries unix fmt lib opam-client)
 )

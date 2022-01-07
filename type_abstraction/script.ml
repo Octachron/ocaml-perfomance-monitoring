@@ -2,7 +2,7 @@
 let before = "Octachron-ocaml-before-pr10337+dump-dir"
 let after = "Octachron-ocaml-pr10337+dump-dir"
 
-let simple = [ "ocamlfind"; "num"; "zarith" ]
+let simple = List.map OpamFormula.atom_of_string [ "ocamlfind"; "num"; "zarith" ]
 let hard =
   [ "ocamlfind"; "num"; "zarith"; "seq"; "containers"; "coq"; "dune"; "re";
     "ocamlbuild"; "uchar"; "topkg"; "uutf"; "tyxml";
@@ -10,7 +10,8 @@ let hard =
   ]
 
 let () = Runner.run
-~n:4
-~switches:[before;after]
-~context:[]
-~pkgs:simple
+ ~log:"type_abstraction"
+ ~n:4
+ ~switches:[before;after]
+ ~context:[]
+ ~pkgs:simple
