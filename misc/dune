@@ -1,0 +1,1 @@
+(executable (modules Opam_trace_extraction) (libraries fmt) (name opam_trace_extraction))
