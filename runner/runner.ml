@@ -1,3 +1,5 @@
+module Pkg = Cmds.Pkg
+
 let output_dir name = "/tmp/" ^ name
 
 let uuid name =
@@ -11,7 +13,7 @@ let uuid name =
   loop 2
 
 let pkg_dir ~switch ~pkg =
-   uuid @@ (switch ^ "-" ^ pkg)
+   uuid @@ (switch ^ "-" ^ Pkg.full pkg)
 
 
 let rec is_prefix_until prefix s len pos =
@@ -74,9 +76,9 @@ let (<!>) = Cmds.(<!>)
 let sample ~log ~switch ~pkg =
   let dir = pkg_dir ~switch ~pkg in
   let () =  Sys.mkdir dir 0o777 in
-  Cmds.execute ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" pkg;
+  Cmds.execute ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" (Pkg.full pkg);
   let build_dir = Cmds.opam_var ~switch ~pkg "build" in
-  Seq.iter (Log.write_entry log) (read_result ~switch ~build_dir ~dir ~pkg)
+  Seq.iter (Log.write_entry log) (read_result ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
 
 let rec multisample n ~log ~switch ~pkg =
   if n = 0 then () else
@@ -92,7 +94,10 @@ let pkg_line n ~log ~switch pkgs  =
     ) pkgs
 
 let install_context ~switches ~pkgs = List.iter (fun switch ->
-    List.iter (fun pkg -> Cmds.install ~switch ~pkg <!> Format.dprintf "Installation failure: %s/%s" switch pkg) pkgs
+    List.iter (fun pkg ->
+        Cmds.install ~switch ~pkg
+        <!> Format.dprintf "Installation failure: %s/%s" switch (Pkg.full pkg)
+      ) pkgs
   ) switches
 
 let start ~n ~switches ~log ~context ~pkgs =
