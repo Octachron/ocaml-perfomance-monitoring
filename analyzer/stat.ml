@@ -32,14 +32,17 @@ module Time_stat(O:observable with type sample = Data.times) = struct
 
 end
 
-module Filesize_stat(O:observable with type sample = Data.filesize) = struct
+module Filesize_stat(O:observable with type sample = float) = struct
   type sample = Data.entry_type
   type t = O.t By_files.t
   let empty = By_files.empty
   let add x  m =
     match x with
-    | Data.Compilation_profile _ -> m
-    | Data.File_size {origin; key; value=observation} ->
+    | Data.Compilation_profile _
+    | Data.File_size { value={kind=Cmi|Cmo|Cmx;_}; _ }
+      -> m
+    | Data.File_size {origin; key; value={kind=Cmt|Cmti; size}} ->
+      let observation = float_of_int size in
       let key = {Data.pkg=origin.pkg; name=key} in
       match By_files.find key m with
       | exception Not_found -> By_files.add key (O.singleton observation) m
@@ -52,15 +55,26 @@ end
 
 
 module List_observable = struct
-  type sample = Data.times
-  type t = sample list
   let singleton x = [x]
   let add x l = x :: l
   let empty = []
 end
 
-module Ls = Time_stat(List_observable)
+module Time_list = struct
+  type sample = Data.times
+  type t = sample list
+  include List_observable
+end
 
+module File_list = struct
+  type sample = float
+  type t = float list
+  include List_observable
+end
+
+
+module Ls = Time_stat(Time_list)
+module Fs = Filesize_stat(File_list)
 
 module type Vec = sig
   type t
@@ -186,13 +200,22 @@ let save_raw name stat =
   let name ="raw_"^ name ^ ".data" in
   to_filename name (fun fmt -> By_files.iter (print_raw_entry name fmt) stat)
 
-
-type 'a balanced = { main:'a; ref:'a }
-
 let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking)
 let ty = List.map (fun x -> x.Data.typechecking)
 let total = List.map (fun x -> x.Data.total)
 let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
+
+
+type 'a balanced = { main:'a; ref:'a }
+
+module type Traversable = sig
+  type 'a t
+  val map: ('a -> 'b) -> 'a t -> 'b t
+  val fold:('acc -> 'a -> 'acc) -> 'acc -> 'a t -> 'acc
+  val pp: 'a Fmt.t -> 'a t Fmt.t
+end
+
+
 
 let map f { ref; main } = { main = f main; ref = f ref }
 
