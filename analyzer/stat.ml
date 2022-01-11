@@ -206,7 +206,7 @@ let total = List.map (fun x -> x.Data.total)
 let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
 
 
-type 'a balanced = { main:'a; ref:'a }
+type 'a balanced = { main:'a array; ref:'a }
 
 module type Traversable = sig
   type 'a t
@@ -217,28 +217,29 @@ end
 
 
 
-let map f { ref; main } = { main = f main; ref = f ref }
+let map f { ref; main } = { main = Array.map f main; ref = f ref }
 
 type simplified = { ty: (summary balanced as 'a); nonty:'a; total:'a; ratio:'a }
 
-let simplify ref main = By_files.fold (fun key times m ->
-    match By_files.find key ref with
+let simplify ref alts = By_files.fold (fun key ref_times m ->
+    match Array.map (By_files.find key) alts with
     | exception Not_found -> m
-    | ref_times ->
-      if List.length times < 2 &&  List.length ref_times < 2 then
+    | all_times ->
+      if Array.exists (fun times -> List.length times < 2) all_times
+         &&  List.length ref_times < 2 then
         m
       else
         let map_summary f x = map (fun x -> summarize (f x)) x in
-        let data = { ref = ref_times; main = times } in
+        let data = { ref = ref_times; main = all_times } in
         let ty = map_summary ty data in
         let nonty = map_summary nonty data in
         let ratio = map_summary ratio data in
         let total = map_summary total data in
-        if ty.main.min > epsilon then
+        if Array.for_all ( fun x -> x.min > epsilon) ty.main  then
           By_files.add key {ty; nonty; total; ratio} m
         else
           m
-  ) main By_files.empty
+  ) ref By_files.empty
 
 let pp_balanced pp ppf x = Fmt.pf ppf "%a %a" pp x.ref pp x.main
 let save_entry fmt pp_key key {ty; nonty; total; ratio } =
