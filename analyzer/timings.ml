@@ -20,7 +20,7 @@ module Make(Alts:Array_like.t) = struct
     let times = Alts.map (fun alt -> Db.find alt db) alternatives in
     S.simplify ref_times times
 
-  module C = Stat.Convex_from_vec(Array_like.As_vec(Vec.Float)(Embedding))
+  module C = Vec_calculus.Convex(Array_like.As_vec(Vec.Float)(Embedding))
   module Kmean = Stat.Kmeans(C)(Inner)
   let kmeans epsilon m =
     Random.self_init ();

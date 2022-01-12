@@ -78,27 +78,9 @@ module type Fold = sig
 
 end
 
-module Stable_average(V:Vec.t)(C:Fold) = struct
-  let map_and_compute f c =
-    let _, s = C.fold (fun (n,mn) x ->
-        let n = n + 1 in
-        n, V.( mn + (f x - mn) /. float n )
-      ) (0, V.zero) c
-    in
-    s
-
-  let compute c =
-    let _, s = C.fold (fun (n,mn) x ->
-        let n = n + 1 in
-        n, V.( mn + (x - mn) /. float n )
-      ) (0, V.zero) c
-    in
-    s
-
-end
 
 
-module Float_stable_average = Stable_average(Vec.Float)(struct type 'a t = 'a List.t let fold = List.fold_left end)
+module Float_stable_average = Vec_calculus.Stable_average(Vec.Float)
 
 let stable_average = Float_stable_average.compute
 let map_stable_average = Float_stable_average.map_and_compute
@@ -112,8 +94,8 @@ type summary = { min:float; mean:interval }
 
 let interval_average l =
   let n = List.length l in
-  let mu = average l in
-  let sigma_2 = variance mu l in
+  let mu = average (List.to_seq l) in
+  let sigma_2 = variance mu (List.to_seq l) in
   let factor = (* should depend on the number of sample *) 2. in
   let width = factor *. sqrt (sigma_2 /. float n) in
   {center=mu; width}
@@ -403,17 +385,6 @@ end
 module Summary_b(Alts:Array_like.t)= Balanced_as_vec(Summary_as_vec)(Alts)
 module Pairs(Alts:Array_like.t) = Pair(Summary_b(Alts))(Summary_b(Alts))
 
-module Convex_from_vec(V:Vec.t) = struct
-  include V
-  let distance_2 x y =
-    let d = V.(x - y) in
-    V.(d|*|d)
-  module Stable = Stable_average(V)(struct
-      type 'a t = 'a Seq.t
-      let fold = Seq.fold_left
-    end)
-  let isobarycenter = Stable.compute
-end
 
 
 module Q = struct
