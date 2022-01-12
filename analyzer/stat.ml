@@ -97,19 +97,8 @@ module Stable_average(V:Vec.t)(C:Fold) = struct
 
 end
 
-module Float_as_vec = struct
-  let ( *. ) = ( *. )
-  let ( + ) = ( +. )
-  let ( - ) = ( -. )
-  let ( /. ) = ( /. )
-  let (|*|) x y = x *. y
-  let zero = 0.
-  type t = float
-  let compare (x:t) (y:t) = Stdlib.compare x y
-  let pp = Fmt.float
-end
 
-module Float_stable_average = Stable_average(Float_as_vec)(struct type 'a t = 'a List.t let fold = List.fold_left end)
+module Float_stable_average = Stable_average(Vec.Float)(struct type 'a t = 'a List.t let fold = List.fold_left end)
 
 let stable_average = Float_stable_average.compute
 let map_stable_average = Float_stable_average.map_and_compute
@@ -376,10 +365,6 @@ module Summary_as_vec = struct
   let zero = { min=0.; mean = Interval_as_vec.zero}
   let compare (x:t) (y:t) = Stdlib.compare x y
   let pp = pp_summary
-end
-
-module Array_as_arraylike = struct
-
 end
 
 module Balanced_as_vec(V:Vec.t)(A:Array_like.t)= struct

@@ -21,7 +21,7 @@ module P = Projectors.I
 
 let epsilon = Analysis.Projectors.epsilon
 
-module Seq_average=Stat.Stable_average(Stat.Float_as_vec)(struct type 'a t = 'a Seq.t let fold = Seq.fold_left end)
+module Seq_average=Stat.Stable_average(Vec.Float)(struct type 'a t = 'a Seq.t let fold = Seq.fold_left end)
 
 
 let hist_and_quantiles dir points (proj: _ Analysis.Projectors.I.t) =
