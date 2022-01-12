@@ -43,7 +43,7 @@ yrange
 plot proj
 
 
-let cloud dir (type a i) m (proj:(a,i Types.input) named) =
+let cloud dir (type a i) m (proj:(a,i Types.input) gen) =
   let points =
     let filter x = Option.map (fun data -> { x with Types.data}) (proj.f x)  in
     Seq.filter_map filter (Seq.map Types.input @@ Stat.By_files.to_seq m)

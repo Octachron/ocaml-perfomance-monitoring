@@ -42,7 +42,7 @@ module Make(Alts:Array_like.t) = struct
     Array.iteri split_and_save groups
 
   module Projectors = struct
-    open Plot_projectors
+    module I = Plot_projectors.Indexed(Alts)
     let epsilon = 1e-6
 
     let mean (x : t) =
@@ -51,46 +51,46 @@ module Make(Alts:Array_like.t) = struct
       if denom < epsilon then
         None
       else
-        Some (Seq.map (fun (tym:Stat.summary) -> tym.mean.center /. denom, tym.mean.width /. denom) (Alts.to_seq ty.main))
+        Some (Alts.map (fun (tym:Stat.summary) -> tym.mean.center /. denom, tym.mean.width /. denom) ty.main)
 
     let other (x : t) =
       let nonty = x.data.nonty in
       let denom = nonty.ref.mean.center in
       if denom < epsilon then None
       else
-        Some (Seq.map (fun (n:Stat.summary) -> n.mean.center /. denom, n.mean.width /. denom) @@ Alts.to_seq nonty.main)
+        Some (Alts.map (fun (n:Stat.summary) -> n.mean.center /. denom, n.mean.width /. denom) nonty.main)
 
     let total (x:t) =
       let r = x.data in
       let denom = r.total.ref.mean.center in
       if denom < epsilon then None
       else
-        Some (Seq.map (fun (t:Stat.summary)->
+        Some (Alts.map (fun (t:Stat.summary)->
             t.mean.center /. denom, t.mean.width /. denom
-          ) @@ Alts.to_seq  r.total.main
+          ) r.total.main
           )
 
 
-    let ratio (x: t) = Some (Seq.map (fun (x:Stat.summary) -> x.mean.center) @@ Alts.to_seq x.data.ratio.main)
-    let min_ratio (x : t) =  Some (Seq.map (fun (x:Stat.summary) -> x.min) @@ Alts.to_seq  x.data.ratio.main)
+    let ratio (x: t) = Some (Alts.map (fun (x:Stat.summary) -> x.mean.center) x.data.ratio.main)
+    let min_ratio (x : t) =  Some (Alts.map (fun (x:Stat.summary) -> x.min)  x.data.ratio.main)
     let min (x: t) =
       let ty = x.data.ty in
       let denom = ty.ref.min in
       if denom < epsilon then None
-      else  Some (Seq.map (fun (ty:Stat.summary) -> ty.min /. denom) @@ Alts.to_seq  ty.main)
+      else  Some (Alts.map (fun (ty:Stat.summary) -> ty.min /. denom) ty.main)
 
     let min_other (x:t) =
       let nonty = x.data.nonty in
       let denom = nonty.ref.min in
       if denom < epsilon then None
-      else Some (Seq.map (fun (nt:Stat.summary) -> nt.min /. denom) @@ Alts.to_seq  nonty.main)
+      else Some (Alts.map (fun (nt:Stat.summary) -> nt.min /. denom) nonty.main)
 
     let min_total (x:t) =
       let total = x.data.total in
       let denom = total.ref.min in
       if denom < epsilon then None
-      else Some (Seq.map (fun (t:Stat.summary) -> t.min /. denom)  @@ Alts.to_seq total.main)
-    let proj kind name title f = Any { info = {kind; name; title}; f }
+      else Some (Alts.map (fun (t:Stat.summary) -> t.min /. denom)  total.main)
+    let proj kind name title f = I.( Any { info = {kind; name; title}; f } )
     let all =
       [
         proj Yes "mean"       "Relative change in average typechecking time" mean;

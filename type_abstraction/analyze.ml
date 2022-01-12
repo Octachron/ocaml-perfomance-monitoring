@@ -17,19 +17,17 @@ end)
 module Analysis = Timings.Make(After)
 open Analysis
 
-let epsilon = Analysis.Projectors.epsilon
+module P = Projectors.I
 
-let seq_fst s = match s () with
-  | Seq.Cons(x,_) -> x
-  | Seq.Nil -> raise (Invalid_argument "seq_fst")
+let epsilon = Analysis.Projectors.epsilon
 
 module Seq_average=Stat.Stable_average(Stat.Float_as_vec)(struct type 'a t = 'a Seq.t let fold = Seq.fold_left end)
 
 
-let hist_and_quantiles dir points (proj: _ Plot_projectors.named) =
+let hist_and_quantiles dir points (proj: _ Analysis.Projectors.I.t) =
   let info = proj.info in
   let points = Seq.filter_map (fun x ->  Option.map (fun data -> { x with Types.data }) (proj.f x)) points in
-  let ordered_points = Stat.order_statistic (Seq.map (Types.Input.map seq_fst) points) in
+  let ordered_points = Stat.order_statistic points in
   let h = Stat.histogram 20 ordered_points in
   let name = Io.out_name ?dir "%s_hist.data" info.name in
   Stat.save_histogram name h;
@@ -39,7 +37,7 @@ let hist_and_quantiles dir points (proj: _ Plot_projectors.named) =
 
 let time_analysis dir log =
    let m = comparison ~ref:before ~alternatives:after log in
-  List.iter (Plot.cloud' dir  m) Projectors.all;
+  List.iter (fun (P.Any x) -> Plot.cloud dir  m (P.gen x)) Projectors.all;
   let m = Stat.By_files.filter (fun _k {Analysis.S.ty;nonty; _} -> ty.ref.min > epsilon && nonty.ref.min > epsilon && nonty.main.min > epsilon )
       m
   in
@@ -47,16 +45,16 @@ let time_analysis dir log =
   let points = Seq.map Types.input @@ Types.By_files.to_seq m in
   let () = List.iter
       (hist_and_quantiles dir points)
-      (List.map Plot_projectors.remove_std Projectors.all)
+      (List.map P.remove_std Projectors.all)
   in
   let report_average ppf np =
-    let np = Plot_projectors.remove_std np in
-    let average = Seq_average.compute @@ seq_fst @@ (Seq.filter_map np.f points) in
+    let np = P.remove_std np in
+    let average = Seq_average.compute @@ (Seq.filter_map np.f points) in
     Fmt.pf ppf "average %s: %g@." np.info.name average
   in
   let report_geometric_average ppf np =
-    let np = Plot_projectors.ln np in
-    let average = Seq_average.compute @@ seq_fst (Seq.filter_map np.f points) in
+    let np = P.ln np  in
+    let average = Seq_average.compute @@ (Seq.filter_map np.f points) in
     Fmt.pf ppf "geometric average %s: %g@." np.info.name (exp average)
   in
   Stat.to_filename (Io.out_name ?dir "averages.data") (fun ppf ->
