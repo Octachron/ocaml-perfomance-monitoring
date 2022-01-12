@@ -399,18 +399,6 @@ module Pair(X:Vec.t)(Y:Vec.t) = struct
   let pp ppf (x,y) = Fmt.pf ppf "(%a,%a)" X.pp x Y.pp y
 end
 
-module R3 = struct
-  type scalar = float
-  type t = {x:scalar; y:scalar; z:scalar}
-  let ( + ) u v= { x=u.x +. v.x; y = u.y +. v.y; z = u.z +. v.z }
-  let ( - ) u v= { x=u.x -. v.x; y = u.y -. v.y; z = u.z -. v.z }
-  let zero = { x =0.; y = 0.; z = 0. }
-  let (|*|) u v = u.x *. v.x +. u.y *. v.y +. u.z *. v.z
-  let ( *. ) l u = { x = l *. u.x; y = l *. u.y; z = l *. u.z }
-  let ( /.  ) u l = { x = u.x /. l; y = u.y /. l; z = u.z /. l }
-  let compare (x:t) (y:t) = Stdlib.compare x y
-  let pp ppf v = Fmt.pf ppf "(%g %g %g)" v.x v.y v.z
-end
 
 module Summary_b(Alts:Array_like.t)= Balanced_as_vec(Summary_as_vec)(Alts)
 module Pairs(Alts:Array_like.t) = Pair(Summary_b(Alts))(Summary_b(Alts))
