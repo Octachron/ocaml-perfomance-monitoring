@@ -1,10 +1,4 @@
 
-let from_branch name = Format.asprintf "Octachron-ocaml-%s" name
-
-let reverted = from_branch "shape_reverted"
-let initial = from_branch "shape_pr10796_minimal"
-let call_by_need = from_branch "shape_pr10825_strong_call_by_need"
-
 
 let simple = [
   "ocamlfind", "1.9.1";
@@ -25,6 +19,7 @@ let irmin =
    ("uri", "4.2.0"); ("lwt", "5.5.0"); ("logs", "0.7.0"); ("irmin", "2.2.0")]
 
 
+open Alts
 
 let () = Runner.run
 ~n:2

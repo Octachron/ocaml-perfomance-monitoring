@@ -11,8 +11,12 @@ end
 module type t = sig
   include core
   val map: ('a -> 'b) -> 'a t -> 'b t
+  val iter: ('a -> unit) -> 'a t -> unit
+  val iteri: (index -> 'a -> unit) -> 'a t -> unit
+
   val exists: ('a -> bool) -> 'a t -> bool
   val for_all: ('a -> bool) -> 'a t -> bool
+
   val map2: ('a -> 'b -> 'c) -> 'a t -> 'b t -> ' c t
   val fold_2: ('a -> 'b -> 'x ) -> ('acc -> 'x -> 'acc) -> 'acc -> 'a t -> 'b t -> 'acc
   val compare: cmp:('a -> 'a -> int) -> 'a t -> 'a t -> int
@@ -68,6 +72,8 @@ module Expand(A:core)
 = struct
   open A
   let map f a = init (fun i -> f a.%(i) )
+  let iter f x = Seq.iter (fun i -> f x.%(i) ) indices
+  let iteri f x = Seq.iter (fun i -> f i x.%(i) ) indices
   let exists pred a =
     let rec search indices = match indices () with
       | Seq.Nil -> false
