@@ -6,13 +6,8 @@ module type observable = sig
   val add: sample -> t -> t
 end
 
-module File_key = struct
-  type t = Data.file = { pkg: string; name: string }
-  let compare: t -> t -> int = Stdlib.compare
-end
-
-module By_files = Map.Make(File_key)
-module By_pkg = Map.Make(String)
+module By_files = Types.By_files
+module File_key = Types.File_key
 
 module Time_stat(O:observable with type sample = Data.times) = struct
   type sample = Data.entry_type
@@ -449,11 +444,11 @@ end
 
 
 module Q = struct
-  type t = { key:Data.file; value:float }
-  let value q = q.value
-  let compare x y = compare x.value y.value
-  let key x = x.key
-  let pp ppf q = Fmt.pf ppf "%g %a" q.value pp_full_key q.key
+  type t = float Types.input
+  let value q = q.Types.data
+  let compare x y = compare (value x) (value y)
+  let key x = x.Types.key
+  let pp ppf q = Fmt.pf ppf "%g %a" (value q) pp_full_key (key q)
 end
 type ordered = Ordered of Q.t array [@@unboxed]
 

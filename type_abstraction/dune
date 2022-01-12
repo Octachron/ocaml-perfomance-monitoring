@@ -1,1 +1,2 @@
-(executable (name script) (libraries runner))
+(executable (name script) (modules Script) (libraries runner))
+(executable (name analyze) (modules Analyze) (libraries analyzer))

@@ -104,6 +104,11 @@ module Expand(A:core)
     Fmt.(seq ~sep:space pp) ppf (to_seq x)
 end
 
+module Expanded(A:core): t with type 'a t = 'a A.t and type index = A.index = struct
+  include A
+  include Expand(A)
+end
+
 module As_vec(V:Vec.t)(A:t): Vec.t with type t = V.t A.t =
 struct
   open V

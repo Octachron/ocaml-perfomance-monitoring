@@ -1,4 +1,4 @@
-(executable
+(library
  (name analyzer)
  (libraries unix fmt lib)
 )
