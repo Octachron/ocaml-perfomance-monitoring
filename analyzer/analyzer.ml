@@ -21,27 +21,123 @@ let read_log log_seq =
   Seq.fold_left Time_reader.read Db.empty log_seq
 
 
-module C = Stat.Convex_from_vec(Stat.R3)
+
+module Projectors = struct
+  type _ with_std =
+    | No: float with_std
+    | Yes: (float * float) with_std
+
+  type ('a,'i) named = { kind:'a with_std; name:string; title:string; f: 'i -> 'a option }
+  type 'i any = Any: ('a,'i) named -> 'i any  [@@unboxed]
+
+
+  let remove_std (Any p) =
+    let f (type a i) (p: (a,i) named) x: float option =
+      match p.kind, p.f x with
+      | No, x -> x
+      | Yes, None -> None
+      | Yes, Some (r,_) -> Some r
+    in
+    {kind=No; name = p.name; title =""; f = f p}
+
+  let ln anp =
+    let ln f x = Option.bind (f x) (fun x -> if x <= 0. then None else Some (Float.log x)) in
+    let s = remove_std anp in
+    { kind=No; name = "log_" ^ s.name; title=""; f = ln s.f }
+
+end
+
 
 type 'a input = { key:Stat.File_key.t; data: 'a}
 
-module Time = struct
-  type t = Stat.simplified input
-  let compare (x:t) (y:t) = compare x y
-  let proj ({ data = {Stat.ty;nonty;_}; _ } : t ) =
-    {
-      Stat.R3.x = log (ty.main.mean.center /. ty.ref.mean.center);
-      y = ty.main.mean.width /. ty.ref.mean.center;
-      z = nonty.main.mean.width /. nonty.ref.mean.center
-    }
+
+module Time(Alts:Array_like.t) = struct
+  module S = Stat.Balanced(Alts)
+  module Embedding0 = Array_like.Triple(Alts)(Alts)(Alts)
+  module Embedding = struct include Embedding0 include Array_like.Expand(Embedding0) end
+
+  module Inner = struct
+    type t = S.simplified input
+    let compare (x:t) (y:t) = compare x y
+    let proj ({ data = {S.ty;nonty;_}; _ } : t ) =
+      Embedding.cat
+        (Alts.map (fun (tyx:Stat.summary) -> tyx.mean.center /. ty.ref.mean.center) ty.main)
+        (Alts.map (fun (tyx:Stat.summary) -> tyx.mean.width /. ty.ref.mean.center) ty.main)
+        (Alts.map (fun (nontyx:Stat.summary) -> nontyx.mean.width /. nonty.ref.mean.center) nonty.main)
+  end
+  include Inner
+  let comparison ~ref ~alternatives db =
+    let ref_times = Db.find ref db in
+    let times = Alts.map (fun alt -> Db.find alt db) alternatives in
+    S.simplify ref_times times
+
+  module C = Stat.Convex_from_vec(Array_like.As_vec(Stat.Float_as_vec)(Embedding))
+  module Kmean = Stat.Kmeans(C)(Inner)
+
+  module Projectors = struct
+    open Projectors
+    let epsilon = 1e-6
+
+    let mean (x : t) =
+      let ty = x.data.ty in
+      let denom = ty.ref.mean.center in
+      if denom < epsilon then
+        None
+      else
+        Some (Alts.map (fun (tym:Stat.summary) -> tym.mean.center /. denom, tym.mean.width /. denom) ty.main)
+
+    let other (x : t) =
+      let nonty = x.data.nonty in
+      let denom = nonty.ref.mean.center in
+      if denom < epsilon then None
+      else
+        Some (nonty.main.mean.center /. denom, nonty.main.mean.width /. denom)
+
+    let total (x:t) =
+      let r = x.data in
+      let denom = r.total.ref.mean.center in
+      if denom < epsilon then None
+      else
+        Some (r.total.main.mean.center /. denom, r.total.main.mean.width /. denom)
+
+
+    let ratio (x: t) = Some x.data.ratio.main.mean.center
+    let min_ratio (x : t) = Some x.data.ratio.main.min
+    let min (x: t) =
+      let ty = x.data.ty in
+      let denom = ty.ref.min in
+      if denom < epsilon then None
+      else  Some (ty.main.min /. denom)
+
+    let min_other (x:t) =
+      let nonty = x.data.nonty in
+      let denom = nonty.ref.min in
+      if denom < epsilon then None
+      else Some (nonty.main.min /. denom)
+    let min_total (x:t) =
+      let total = x.data.total in
+      let denom = total.ref.min in
+      if denom < epsilon then None
+      else Some (total.main.min /. denom)
+    let all =
+      [
+        Any {kind=Yes; name="mean"; title="Relative change in average typechecking time"; f=mean} ;
+        Any {kind=Yes; name="other"; title="Relative change in average time spent outside of typeching"; f=other};
+        Any {kind=Yes; name="total"; title="Relative change in average total compilation time"; f=total};
+        Any {kind=No; name="profile"; title="Ratio of average typechecking time compared to average total compilation time"; f=ratio};
+        Any {kind=No; name="min"; title="Relative change in minimal typechecking time"; f=min};
+        Any {kind=No; name="min_other"; title="Relative change in minimal time spent outside of typeching"; f=min_other};
+        Any {kind=No; name="min_total"; title="Relative change in minimal total compilation time"; f= min_total};
+        Any {kind=No; name="min_profile"; title="Ratio of minimal typechecking time compared to minimal total compilation time"; f=min_ratio};
+      ]
+  end
+
 end
-module Time_kmean = Stat.Kmeans(C)(Time)
+
+
 module Seq_average=Stat.Stable_average(Stat.Float_as_vec)(struct type 'a t = 'a Seq.t let fold = Seq.fold_left end)
 
-let comparison ~before ~after db =
-    let ref_times = Db.find before db in
-    let times = Db.find after db in
-    Stat.simplify ref_times times
+
 
 let before = "Octachron-ocaml-before-pr10337+dump-dir"
 let after = "Octachron-ocaml-pr10337+dump-dir"
@@ -77,84 +173,6 @@ let read_logs logs =
 let out_name fmt = match !data_dir with
   | None -> Fmt.str fmt
   | Some dir -> Fmt.kstr (fun x -> Filename.concat dir x) fmt
-
-let epsilon = 1e-6
-
-module Projectors = struct
-  type _ with_std =
-    | No: float with_std
-    | Yes: (float * float) with_std
-
-  type ('a,'i) named = { kind:'a with_std; name:string; title:string; f: 'i -> 'a option }
-  type 'i any = Any: ('a,'i) named -> 'i any  [@@unboxed]
-  let mean (x : Time.t) =
-    let ty = x.data.ty in
-    let denom = ty.ref.mean.center in
-    if denom < epsilon then
-      None
-    else
-      Some (ty.main.mean.center /. denom, ty.main.mean.width /. denom)
-  let other (x : Time.t) =
-    let nonty = x.data.nonty in
-    let denom = nonty.ref.mean.center in
-    if denom < epsilon then None
-      else
-        Some (nonty.main.mean.center /. denom, nonty.main.mean.width /. denom)
-  let total (x:Time.t) =
-    let r = x.data in
-    let denom = r.total.ref.mean.center in
-    if denom < epsilon then None
-      else
-      Some (r.total.main.mean.center /. denom, r.total.main.mean.width /. denom)
-
-
-  let ratio (x: Time.t) = Some x.data.ratio.main.mean.center
-  let min_ratio (x : Time.t) = Some x.data.ratio.main.min
-  let min (x: Time.t) =
-    let ty = x.data.ty in
-    let denom = ty.ref.min in
-    if denom < epsilon then None
-    else  Some (ty.main.min /. denom)
-
-  let min_other (x:Time.t) =
-    let nonty = x.data.nonty in
-    let denom = nonty.ref.min in
-    if denom < epsilon then None
-    else Some (nonty.main.min /. denom)
-  let min_total (x:Time.t) =
-    let total = x.data.total in
-    let denom = total.ref.min in
-    if denom < epsilon then None
-    else Some (total.main.min /. denom)
-  let all =
-    [
-      Any {kind=Yes; name="mean"; title="Relative change in average typechecking time"; f=mean} ;
-      Any {kind=Yes; name="other"; title="Relative change in average time spent outside of typeching"; f=other};
-      Any {kind=Yes; name="total"; title="Relative change in average total compilation time"; f=total};
-      Any {kind=No; name="profile"; title="Ratio of average typechecking time compared to average total compilation time"; f=ratio};
-      Any {kind=No; name="min"; title="Relative change in minimal typechecking time"; f=min};
-      Any {kind=No; name="min_other"; title="Relative change in minimal time spent outside of typeching"; f=min_other};
-      Any {kind=No; name="min_total"; title="Relative change in minimal total compilation time"; f= min_total};
-      Any {kind=No; name="min_profile"; title="Ratio of minimal typechecking time compared to minimal total compilation time"; f=min_ratio};
-    ]
-
-
-  let remove_std (Any p) =
-    let f (type a i) (p: (a,i) named) x: float option =
-      match p.kind, p.f x with
-      | No, x -> x
-      | Yes, None -> None
-      | Yes, Some (r,_) -> Some r
-    in
-    {kind=No; name = p.name; title =""; f = f p}
-
-  let ln anp =
-    let ln f x = Option.bind (f x) (fun x -> if x <= 0. then None else Some (Float.log x)) in
-    let s = remove_std anp in
-    { kind=No; name = "log_" ^ s.name; title=""; f = ln s.f }
-
-end
-open Projectors
 
 let by_pkg_data seq =
   let by_pkg = Stat.By_pkg.empty in
@@ -200,7 +218,7 @@ let kmeans epsilon m =
   Array.sort (fun y x -> compare (Time_kmean.Points.cardinal x.Time_kmean.points) (Time_kmean.Points.cardinal y.Time_kmean.points) ) groups;
   Array.iteri split_and_save groups
 
-
+open Projectors
 let cloud_plot (type a i) (ymin,ymax) pkgs (proj: (a,i) named) ppf =
   let tics ppf (pkg,n,pos) =  Fmt.pf ppf "%S %d" pkg (pos - n/2) in
   let comma ppf () = Fmt.pf ppf "," in

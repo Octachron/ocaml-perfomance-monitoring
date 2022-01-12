@@ -76,18 +76,6 @@ end
 module Ls = Time_stat(Time_list)
 module Fs = Filesize_stat(File_list)
 
-module type Vec = sig
-  type t
-  val zero: t
-  val ( + ): t -> t -> t
-  val ( - ): t -> t -> t
-  val (  *. ): float -> t -> t
-  val (  /. ): t -> float -> t
-  val ( |*| ): t -> t -> float
-  val compare: t -> t -> int
-  val pp: Format.formatter -> t -> unit
-end
-
 
 module type Fold = sig
   type 'a t
@@ -95,7 +83,7 @@ module type Fold = sig
 
 end
 
-module Stable_average(V:Vec)(C:Fold) = struct
+module Stable_average(V:Vec.t)(C:Fold) = struct
   let map_and_compute f c =
     let _, s = C.fold (fun (n,mn) x ->
         let n = n + 1 in
@@ -206,52 +194,54 @@ let total = List.map (fun x -> x.Data.total)
 let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
 
 
-type 'a balanced = { main:'a array; ref:'a }
-
-module type Traversable = sig
-  type 'a t
-  val map: ('a -> 'b) -> 'a t -> 'b t
-  val fold:('acc -> 'a -> 'acc) -> 'acc -> 'a t -> 'acc
-  val pp: 'a Fmt.t -> 'a t Fmt.t
-end
 
 
 
-let map f { ref; main } = { main = Array.map f main; ref = f ref }
-
-type simplified = { ty: (summary balanced as 'a); nonty:'a; total:'a; ratio:'a }
-
-let simplify ref alts = By_files.fold (fun key ref_times m ->
-    match Array.map (By_files.find key) alts with
-    | exception Not_found -> m
-    | all_times ->
-      if Array.exists (fun times -> List.length times < 2) all_times
-         &&  List.length ref_times < 2 then
-        m
-      else
-        let map_summary f x = map (fun x -> summarize (f x)) x in
-        let data = { ref = ref_times; main = all_times } in
-        let ty = map_summary ty data in
-        let nonty = map_summary nonty data in
-        let ratio = map_summary ratio data in
-        let total = map_summary total data in
-        if Array.for_all ( fun x -> x.min > epsilon) ty.main  then
-          By_files.add key {ty; nonty; total; ratio} m
-        else
-          m
-  ) ref By_files.empty
-
-let pp_balanced pp ppf x = Fmt.pf ppf "%a %a" pp x.ref pp x.main
-let save_entry fmt pp_key key {ty; nonty; total; ratio } =
-  let pp = pp_balanced pp_summary in
-  Fmt.pf fmt "%a %a %a %a %a@."
-    pp_key key
-    pp ty
-    pp nonty
-    pp total
-    pp ratio
+type ('r,'alts) balanced = { main:'alts; ref:'r }
+let pp_balanced pp_ref pp_alts ppf x =
+  Fmt.pf ppf "%a %a"
+    pp_ref x.ref
+    pp_alts x.main
 
 let pp_full_key ppf (key:File_key.t) = Fmt.pf ppf "%s:%s" key.pkg key.name
+
+
+module Balanced(A:Array_like.t) = struct
+  type 'a t = ('a, 'a A.t) balanced
+  let map f { ref; main } = { main = A.map f main; ref = f ref }
+
+  type simplified = { ty: (summary t as 'a); nonty:'a; total:'a; ratio:'a }
+
+  let simplify ref alts = By_files.fold (fun key ref_times m ->
+      match A.map (By_files.find key) alts with
+      | exception Not_found -> m
+      | all_times ->
+        if A.exists (fun times -> List.length times < 2) all_times
+        &&  List.length ref_times < 2 then
+          m
+        else
+          let map_summary f x = map (fun x -> summarize (f x)) x in
+          let data = { ref = ref_times; main = all_times } in
+          let ty = map_summary ty data in
+          let nonty = map_summary nonty data in
+          let ratio = map_summary ratio data in
+          let total = map_summary total data in
+          if A.for_all ( fun x -> x.min > epsilon) ty.main  then
+            By_files.add key {ty; nonty; total; ratio} m
+          else
+            m
+    ) ref By_files.empty
+
+  let space ppf () = Fmt.pf ppf " "
+
+  let save_entry fmt pp_key key {ty; nonty; total; ratio } =
+    let pp = pp_balanced pp_summary (A.pp pp_summary) in
+    Fmt.pf fmt "%a %a %a %a %a@."
+      pp_key key
+      pp ty
+      pp nonty
+      pp total
+      pp ratio
 
 
 let save filename m = to_filename filename (fun fmt ->
@@ -268,6 +258,8 @@ let save filename m = to_filename filename (fun fmt ->
     ;
       By_files.iter (save_entry fmt pp_full_key) m
   )
+
+end
 
 
 module type Convex_space = sig
@@ -391,24 +383,28 @@ module Summary_as_vec = struct
   let pp = pp_summary
 end
 
+module Array_as_arraylike = struct
 
-module Balanced_as_vec(V:Vec) = struct
-  type t = V.t balanced
-  open V
-  let ( + ) x y = { main = x.main + y.main; ref = x.ref + y.ref }
-  let ( - ) x y = { main = x.main - y.main; ref = x.ref - y.ref }
-  let (|*|) x y = V.(x.main|*|y.main) +. V.(y.ref|*|y.ref)
-  let ( *. ) l x = { main = l *. x.main; ref = l *. x.ref }
-  let ( /. ) x l = { main = x.main /. l; ref = x.ref /. l }
-  let zero = { main = V.zero; ref = V.zero }
-  let compare x y =
-    let res = V.compare x.main y.main in
-    if res = 0 then V.compare x.ref y.ref
-    else res
-  let pp ppf x = Fmt.pf ppf "%a(%a)" V.pp x.main V.pp x.ref
 end
 
-module Pair(X:Vec)(Y:Vec) = struct
+module Balanced_as_vec(V:Vec.t)(A:Array_like.t)= struct
+  type t = (V.t, V.t A.t) balanced
+  open V
+
+  let ( + ) x y = { main = A.map2 (+) x.main y.main; ref = x.ref + y.ref }
+  let ( - ) x y = { main = A.map2 (-) x.main y.main; ref = x.ref - y.ref }
+  let (|*|) x y = A.fold_2 V.(|*|) (+.) 0. x.main y.main +. V.(y.ref|*|y.ref)
+  let ( *. ) l x = { main = A.map ( ( *. ) l ) x.main; ref = l *. x.ref }
+  let ( /. ) x l = { main = A.map (fun x -> x /. l) x.main; ref = x.ref /. l }
+  let zero = { main = A.init (fun _ -> V.zero); ref = V.zero }
+  let compare x y =
+    let res = A.compare ~cmp:V.compare x.main y.main in
+    if res = 0 then V.compare x.ref y.ref
+    else res
+  let pp ppf x = Fmt.pf ppf "%a(%a)" (A.pp V.pp) x.main V.pp x.ref
+end
+
+module Pair(X:Vec.t)(Y:Vec.t) = struct
   type t = X.t * Y.t
   let ( + ) (x,u) (y,v) = X.( x + y ), Y.(u + v)
   let ( - ) (x,u) (y,v) = X.( x - y ), Y.(u - v)
@@ -436,10 +432,10 @@ module R3 = struct
   let pp ppf v = Fmt.pf ppf "(%g %g %g)" v.x v.y v.z
 end
 
-module Summary_b = Balanced_as_vec(Summary_as_vec)
-module Pairs = Pair(Summary_b)(Summary_b)
+module Summary_b(Alts:Array_like.t)= Balanced_as_vec(Summary_as_vec)(Alts)
+module Pairs(Alts:Array_like.t) = Pair(Summary_b(Alts))(Summary_b(Alts))
 
-module Convex_from_vec(V:Vec) = struct
+module Convex_from_vec(V:Vec.t) = struct
   include V
   let distance_2 x y =
     let d = V.(x - y) in

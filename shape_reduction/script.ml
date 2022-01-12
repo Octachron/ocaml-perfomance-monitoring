@@ -3,7 +3,7 @@ let from_branch name = Format.asprintf "Octachron-ocaml-%s" name
 
 let reverted = from_branch "shape_reverted"
 let initial = from_branch "shape_pr10796_minimal"
-let call_by_need = from_branch "shape_10825_strong_call_by_need"
+let call_by_need = from_branch "shape_pr10825_strong_call_by_need"
 
 
 let simple = [
@@ -28,7 +28,7 @@ let irmin =
 
 let () = Runner.run
 ~n:2
-~switches:[reverted;initial;call_by_need]
+~switches:[call_by_need]
 ~context:[]
 ~pkgs:irmin
 ~log:Sys.argv.(1)
