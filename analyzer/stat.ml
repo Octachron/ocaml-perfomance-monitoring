@@ -154,11 +154,28 @@ let save_raw name stat =
   let name ="raw_"^ name ^ ".data" in
   to_filename name (fun fmt -> By_files.iter (print_raw_entry name fmt) stat)
 
-let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking)
-let ty = List.map (fun x -> x.Data.typechecking)
-let total = List.map (fun x -> x.Data.total)
-let ratio = List.map (fun x -> x.Data.typechecking/. x.total)
+module Slice0 = struct
+  type index = Ty | Nonty | Total | Ratio
+  type 'a t = { ty:'a; nonty:'a; total:'a; ratio:'a}
+  let dim _ = 4
+  let (.%()) x = function
+    | Nonty -> x.nonty
+    | Ty -> x.ty
+    | Total -> x.total
+    | Ratio -> x.ratio
+  let init f = { nonty = f Nonty; ty = f Ty; total = f Total; ratio = f Ratio }
+  let indices = Array.to_seq [|Ty; Nonty; Total; Ratio |]
+  let to_seq x = Array.to_seq [|x.ty; x.nonty; x.total; x.ratio|]
+end
 
+module Slice = struct include Slice0 include Array_like.Expand(Slice0) end
+
+let gen =
+  let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking) in
+  let ty = List.map (fun x -> x.Data.typechecking) in
+  let total = List.map (fun x -> x.Data.total) in
+  let ratio = List.map (fun x -> x.Data.typechecking/. x.total) in
+  Slice.{nonty;total;ratio;ty}
 
 
 
@@ -176,7 +193,7 @@ module Balanced(A:Array_like.t) = struct
   type 'a t = ('a, 'a A.t) balanced
   let map f { ref; main } = { main = A.map f main; ref = f ref }
 
-  type simplified = { ty: (summary t as 'a); nonty:'a; total:'a; ratio:'a }
+  type simplified = summary t Slice.t
 
   let simplify ref alts = By_files.fold (fun key ref_times m ->
       match A.map (By_files.find key) alts with
@@ -186,28 +203,22 @@ module Balanced(A:Array_like.t) = struct
         &&  List.length ref_times < 2 then
           m
         else
-          let map_summary f x = map (fun x -> summarize (f x)) x in
+          let map_summary x f = map (fun x -> summarize (f x)) x in
           let data = { ref = ref_times; main = all_times } in
-          let ty = map_summary ty data in
-          let nonty = map_summary nonty data in
-          let ratio = map_summary ratio data in
-          let total = map_summary total data in
-          if A.for_all ( fun x -> x.min > epsilon) ty.main  then
-            By_files.add key {ty; nonty; total; ratio} m
+          let data = Slice.map (map_summary data) gen in
+          if A.for_all ( fun x -> x.min > epsilon) data.ty.main  then
+            By_files.add key data m
           else
             m
     ) ref By_files.empty
 
   let space ppf () = Fmt.pf ppf " "
 
-  let save_entry fmt pp_key key {ty; nonty; total; ratio } =
+  let save_entry fmt pp_key key slice =
     let pp = pp_balanced pp_summary (A.pp pp_summary) in
-    Fmt.pf fmt "%a %a %a %a %a@."
+    Fmt.pf fmt "%a %a@."
       pp_key key
-      pp ty
-      pp nonty
-      pp total
-      pp ratio
+      (Slice.pp pp) slice
 
 
 let save filename m = to_filename filename (fun fmt ->

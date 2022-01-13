@@ -52,7 +52,7 @@ let hist_and_quantiles dir points (proj: _ P.t) =
 let time_analysis dir log =
    let m = Gen.compare ~ref:reverted ~alternatives log in
   List.iter (fun (P.Any x) -> Plot.cloud dir  m (P.gen x)) Min_proj.all;
-  let m = Stat.By_files.filter (fun _k {Time_info.ty;nonty; _} ->
+  let m = Stat.By_files.filter (fun _k ({ty;nonty; _}:Time_info.simplified) ->
       ty.ref.min > epsilon && nonty.ref.min > epsilon &&
       Variants.for_all (fun (nt:Stat.summary) -> nt.min > epsilon ) nonty.main
     ) m

@@ -99,7 +99,7 @@ module Kmeans(Alts:Array_like.t)(S:module type of Stat.Balanced(Alts)) = struct
   module Inner = struct
     type t = S.simplified Types.input
     let compare (x:t) (y:t) = compare x y
-    let proj ({ data = {S.ty;nonty;_}; _ } : t ) =
+    let proj ({ data = {Stat.Slice.ty;nonty;_}; _ } : t ) =
       Embedding.cat
         (Alts.map (fun (tyx:Stat.summary) -> tyx.mean.center /. ty.ref.mean.center) ty.main)
         (Alts.map (fun (tyx:Stat.summary) -> tyx.mean.width /. ty.ref.mean.center) ty.main)

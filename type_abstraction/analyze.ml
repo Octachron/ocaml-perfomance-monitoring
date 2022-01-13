@@ -43,7 +43,7 @@ let hist_and_quantiles dir points (proj: _ P.t) =
 let time_analysis dir log =
    let m = Gen.compare ~ref:before ~alternatives:after log in
   List.iter (fun (P.Any x) -> Plot.cloud dir  m (P.gen x)) projs;
-  let m = Stat.By_files.filter (fun _k {Time_info.ty;nonty; _} -> ty.ref.min > epsilon && nonty.ref.min > epsilon && nonty.main.min > epsilon )
+  let m = Stat.By_files.filter (fun _k ({ty;nonty; _}: Time_info.simplified) -> ty.ref.min > epsilon && nonty.ref.min > epsilon && nonty.main.min > epsilon )
       m
   in
   Time_info.save (Io.out_name ?dir "by_files.data") m;
