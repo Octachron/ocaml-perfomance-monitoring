@@ -14,8 +14,10 @@ module V = struct
 end
 
 module Variants = Array_like.Expanded(V)
+module Vec_variants = Array_like.As_vec(Vec.Float)(Variants)
 
 module Time_info = Stat.Balanced(Variants)
+module Size_info = Time_info
 module Gen = Timings.Generator(Variants)(Time_info)
 
 module P = Plot_projectors.Indexed(Variants)
@@ -33,7 +35,7 @@ let dispatch' f s = Variants.init (fun index -> f (Seq.map  (fun x -> x.Variants
 
 let (.%()) = Variants.(.%())
 let alternatives = { V.initial; call_by_need }
-
+let names = { V.initial = "initial_bugfix"; call_by_need="strong_call_by_need" }
 
 let hist_and_quantiles dir points (proj: _ P.t) =
   let info = proj.info in
@@ -51,13 +53,13 @@ let hist_and_quantiles dir points (proj: _ P.t) =
 
 let time_analysis dir log =
    let m = Gen.compare ~ref:reverted ~alternatives log in
-  List.iter (fun (P.Any x) -> Plot.cloud dir  m (P.gen x)) Min_proj.all;
+  List.iter (fun (P.Any x) -> Plot.cloud dir m (P.gen x)) Min_proj.all;
   let m = Stat.By_files.filter (fun _k ({ty;nonty; _}:Time_info.simplified) ->
       ty.ref.min > epsilon && nonty.ref.min > epsilon &&
       Variants.for_all (fun (nt:Stat.summary) -> nt.min > epsilon ) nonty.main
     ) m
   in
-  Time_info.save (Io.out_name ?dir "by_files.data") m;
+  Time_info.save (Io.out_name ?dir "timing_by_files.data") m;
   let points = Seq.map Types.input @@ Types.By_files.to_seq m in
   let projs = Min_proj.all in
   let () = List.iter
@@ -84,13 +86,54 @@ let time_analysis dir log =
 module Size_analysis = struct
   module By_files = Types.By_files
 
-  let read ref alts = By_files.fold (fun key ref_size m ->
+  type elt = float Size_info.t
+  type t = elt Types.input
+
+  let read ~ref ~alts = By_files.fold (fun key ref_size m ->
       match Variants.map (By_files.find key) alts with
       | exception Not_found -> m
       | all_sizes ->
-          let data = { Stat.ref = ref_size; main = all_sizes } in
+         let simplify l = List.fold_left min Float.infinity l in
+          let data = { Stat.ref = simplify ref_size; main = Variants.map simplify all_sizes } in
           By_files.add key data m
     ) ref By_files.empty
+
+
+  let absolute =
+    P.Any { P.info={kind=No; name="absolute_size"; title="Absolute file size" };
+                 f = (fun (x:t) -> Some x.data.main)
+    }
+
+  let relative =
+    P.Any { P.info={kind=No; name="relatice_size"; title="Relatice file size" };
+      f = (fun (x:t) -> Some Vec_variants.(x.data.main /. x.data.ref) )
+    }
+
+  let plot_variants = [ absolute; relative ]
+
+  let save_size_entry fmt key (data:elt) =
+      Fmt.pf fmt "%a %g %a@."
+        Stat.pp_full_key key
+        data.ref
+        (Variants.pp Fmt.float) data.main
+
+  let save filename m = Stat.to_filename filename (fun fmt ->
+      Fmt.pf fmt "File Filesize:reverted Filesize:minimal_bugfix Filesize:strong_call_by_need@.";
+      By_files.iter (save_size_entry fmt) m
+    )
+
+  let start dir log =
+    let ref = Types.Db.find reverted log in
+    let alts = Variants.map (fun n -> Types.Db.find n log) alternatives in
+    let m = read ~ref ~alts in
+    List.iter (fun (P.Any x) -> Plot.cloud dir m (P.gen x)) plot_variants;
+    save (Io.out_name ?dir "size_by_files.data") m;
+    let points = Seq.map Types.input @@ Types.By_files.to_seq m in
+    let () = List.iter
+        (hist_and_quantiles dir points)
+        (List.map P.remove_std plot_variants)
+    in
+    ()
 
 end
 
@@ -100,4 +143,5 @@ let () =
   Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
   let log_seq = read_logs !log_files in
   let log = read_log log_seq in
-  time_analysis !data_dir log
+  time_analysis !data_dir (Types.By_pkg.map (fun x -> x.Stat.R.times) log);
+  Size_analysis.start !data_dir  (Types.By_pkg.map (fun x -> x.Stat.R.sizes) log)

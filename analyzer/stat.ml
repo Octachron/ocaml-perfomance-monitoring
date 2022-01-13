@@ -9,39 +9,36 @@ end
 module By_files = Types.By_files
 module File_key = Types.File_key
 
-module Time_stat(O:observable with type sample = Data.times) = struct
+module Reader
+    (T:observable with type sample = Data.times)
+    (S:observable with type sample = float)
+=
+
+struct
   type sample = Data.entry_type
-  type t = O.t By_files.t
-  let empty = By_files.empty
+  type t = { times: T.t By_files.t; sizes: S.t By_files.t }
+  let empty = { times = By_files.empty; sizes = By_files.empty }
+
+
   let add x m =
     match x with
-    | Data.File_size _ -> m
-    | Data.Compilation_profile {origin; key; value=observation} ->
-      let key = {Data.pkg=origin.pkg; name=key} in
-      match By_files.find key m with
-      | exception Not_found -> By_files.add key (O.singleton observation) m
-      | observable -> By_files.add key O.(add observation observable) m
-
-  let add_list ls o = List.fold_left (fun acc x -> add x acc) o ls
-  let singleton x = add x empty
-
-end
-
-module Filesize_stat(O:observable with type sample = float) = struct
-  type sample = Data.entry_type
-  type t = O.t By_files.t
-  let empty = By_files.empty
-  let add x  m =
-    match x with
-    | Data.Compilation_profile _
     | Data.File_size { value={kind=Cmi|Cmo|Cmx;_}; _ }
       -> m
     | Data.File_size {origin; key; value={kind=Cmt|Cmti; size}} ->
       let observation = float_of_int size in
       let key = {Data.pkg=origin.pkg; name=key} in
-      match By_files.find key m with
-      | exception Not_found -> By_files.add key (O.singleton observation) m
-      | observable -> By_files.add key O.(add observation observable) m
+      let sizes =
+        match By_files.find key m.sizes with
+        | exception Not_found -> By_files.add key (S.singleton observation) m.sizes
+        | observable -> By_files.add key S.(add observation observable) m.sizes
+      in
+      { m with sizes }
+    | Data.Compilation_profile {origin; key; value=observation} ->
+      let key = {Data.pkg=origin.pkg; name=key} in
+      let times = match By_files.find key m.times with
+        | exception Not_found -> By_files.add key (T.singleton observation) m.times
+        | observable -> By_files.add key T.(add observation observable) m.times
+      in { m with times}
 
   let add_list ls o = List.fold_left (fun acc x -> add x acc) o ls
   let singleton x = add x empty
@@ -68,8 +65,7 @@ module File_list = struct
 end
 
 
-module Ls = Time_stat(Time_list)
-module Fs = Filesize_stat(File_list)
+module R = Reader(Time_list)(File_list)
 
 module Float_stable_average = Vec_calculus.Stable_average(Vec.Float)
 

@@ -75,4 +75,4 @@ let () =
   Arg.parse [log;dir] anon "analyzer -output-dir dir -log log1 -log log2 log3";
   let log_seq = read_logs !log_files in
   let log = read_log log_seq in
-  time_analysis !data_dir log
+  time_analysis !data_dir (Types.By_pkg.map (fun x -> x.Stat.R.times) log)

@@ -15,12 +15,11 @@ module Observable_reader(O:Stat.observable with type sample = Data.entry_type) =
 end
 
 
-module Time_reader = Observable_reader(Stat.Ls)
-module Size_reader = Observable_reader(Stat.Fs)
+module R = Observable_reader(Stat.R)
 
 
 let read_log log_seq =
-  Seq.fold_left Time_reader.read Types.Db.empty log_seq
+  Seq.fold_left R.read Types.Db.empty log_seq
 
 
 
