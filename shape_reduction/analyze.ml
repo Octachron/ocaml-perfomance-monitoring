@@ -15,13 +15,14 @@ end
 
 module Variants = Array_like.Expanded(V)
 
+module Time_info = Stat.Balanced(Variants)
+module Gen = Timings.Generator(Variants)(Time_info)
 
-module Analysis = Timings.Make(Variants)
-open Analysis
+module P = Plot_projectors.Indexed(Variants)
 
-module P = Projectors.I
+module Min_proj = Timings.Min_projectors(Variants)(Time_info)(P)
 
-let epsilon = Analysis.Projectors.epsilon
+let epsilon = Min_proj.epsilon
 
 module Seq_average=Vec_calculus.Stable_average(Vec.Float)
 
@@ -34,7 +35,7 @@ let (.%()) = Variants.(.%())
 let alternatives = { V.initial; call_by_need }
 
 
-let hist_and_quantiles dir points (proj: _ Analysis.Projectors.I.t) =
+let hist_and_quantiles dir points (proj: _ P.t) =
   let info = proj.info in
   let points = Seq.filter_map (fun x ->  Option.map (fun data -> { x with Types.data }) (proj.f x)) points in
   let ordered_points = dispatch Stat.order_statistic points in
@@ -49,18 +50,19 @@ let hist_and_quantiles dir points (proj: _ Analysis.Projectors.I.t) =
 
 
 let time_analysis dir log =
-   let m = comparison ~ref:reverted ~alternatives log in
-  List.iter (fun (P.Any x) -> Plot.cloud dir  m (P.gen x)) Projectors.all;
-  let m = Stat.By_files.filter (fun _k {Analysis.S.ty;nonty; _} ->
+   let m = Gen.compare ~ref:reverted ~alternatives log in
+  List.iter (fun (P.Any x) -> Plot.cloud dir  m (P.gen x)) Min_proj.all;
+  let m = Stat.By_files.filter (fun _k {Time_info.ty;nonty; _} ->
       ty.ref.min > epsilon && nonty.ref.min > epsilon &&
       Variants.for_all (fun (nt:Stat.summary) -> nt.min > epsilon ) nonty.main
     ) m
   in
-  Analysis.S.save (Io.out_name ?dir "by_files.data") m;
+  Time_info.save (Io.out_name ?dir "by_files.data") m;
   let points = Seq.map Types.input @@ Types.By_files.to_seq m in
+  let projs = Min_proj.all in
   let () = List.iter
       (hist_and_quantiles dir points)
-      (List.map P.remove_std Projectors.all)
+      (List.map P.remove_std projs)
   in
   let report_average ppf np =
     let np = P.remove_std np in
@@ -73,8 +75,8 @@ let time_analysis dir log =
     Fmt.pf ppf "geometric average %s: %a@." np.info.name (Variants.pp Fmt.float) (Variants.map exp average)
   in
   Stat.to_filename (Io.out_name ?dir "averages.data") (fun ppf ->
-      List.iter (report_average ppf) Projectors.all;
-      List.iter (report_geometric_average ppf) Projectors.all
+      List.iter (report_average ppf) projs;
+      List.iter (report_geometric_average ppf) projs
     );
   Stat.to_filename (Io.out_name ?dir "pkgs.data")
     (By_pkg_aggregation.global_count (Seq.map Types.input @@ Types.By_files.to_seq m))
