@@ -71,15 +71,6 @@ end
 module Ls = Time_stat(Time_list)
 module Fs = Filesize_stat(File_list)
 
-
-module type Fold = sig
-  type 'a t
-  val fold: ('a -> 'b -> 'a) -> 'a -> 'b t -> 'a
-
-end
-
-
-
 module Float_stable_average = Vec_calculus.Stable_average(Vec.Float)
 
 let stable_average = Float_stable_average.compute
