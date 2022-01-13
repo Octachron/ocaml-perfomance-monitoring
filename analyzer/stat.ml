@@ -127,7 +127,7 @@ let bootstrap_ratio_samples x y =
 let print_raw_entry name ppf (key:File_key.t) times =
   let space ppf () = Fmt.pf ppf " " in
   let list = Fmt.(list ~sep:space Data.pp_times) in
-  Fmt.pf ppf "%s %s %s %a@." name key.pkg key.name list times
+  Fmt.pf ppf "@[<h>%s %s %s %a@]@." name key.pkg key.name list times
 
 let to_filename filename f =
   let chan = open_out filename in
@@ -169,7 +169,7 @@ let gen =
 
 type ('r,'alts) balanced = { main:'alts; ref:'r }
 let pp_balanced pp_ref pp_alts ppf x =
-  Fmt.pf ppf "%a %a"
+  Fmt.pf ppf "@[<h>%a %a@]"
     pp_ref x.ref
     pp_alts x.main
 
@@ -203,7 +203,7 @@ module Balanced(A:Array_like.t) = struct
 
   let save_entry fmt pp_key key slice =
     let pp = pp_balanced pp_summary (A.pp pp_summary) in
-    Fmt.pf fmt "%a %a@."
+    Fmt.pf fmt "@[<h>%a %a@]@."
       pp_key key
       (Slice.pp pp) slice
 

@@ -106,7 +106,7 @@ module Expand(A:core)
     compare cmp x y A.indices
   let map2 f x y= A.init (fun index -> f x.%(index) y.%(index) )
   let pp pp ppf x =
-    let space ppf () = Fmt.pf ppf " " in
+    let space ppf () = Fmt.pf ppf "@ " in
     Fmt.(seq ~sep:space pp) ppf (to_seq x)
 end
 

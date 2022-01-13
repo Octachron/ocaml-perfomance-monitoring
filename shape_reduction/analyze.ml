@@ -42,11 +42,11 @@ let hist_and_quantiles dir points (proj: _ P.t) =
   let points = Seq.filter_map (fun x ->  Option.map (fun data -> { x with Types.data }) (proj.f x)) points in
   let ordered_points = dispatch Stat.order_statistic points in
   let h = Variants.map (Stat.histogram 20) ordered_points in
-  let name v = Io.out_name ?dir "%s_%s_hist.data" (alternatives.%(v)) info.name in
+  let name v = Io.out_name ?dir "%s_%s_hist.data" (names.%(v)) info.name in
   Variants.iteri (fun i -> Stat.save_histogram (name i)) h;
   Variants.iteri (fun i ordered_points ->
-      Stat.save_quantiles (Io.out_name ?dir "%s_%s_quantiles.data" alternatives.%(i) info.name) ordered_points;
-      Stat.save_quantile_table info.name (Io.out_name ?dir "%s_%s_quantile_table.md" alternatives.%(i) info.name) ordered_points
+      Stat.save_quantiles (Io.out_name ?dir "%s_%s_quantiles.data" names.%(i) info.name) ordered_points;
+      Stat.save_quantile_table info.name (Io.out_name ?dir "%s_%s_quantile_table.md" names.%(i) info.name) ordered_points
     )
     ordered_points
 
@@ -105,20 +105,20 @@ module Size_analysis = struct
     }
 
   let relative =
-    P.Any { P.info={kind=No; name="relatice_size"; title="Relatice file size" };
+    P.Any { P.info={kind=No; name="relative_size"; title="Relative file size" };
       f = (fun (x:t) -> Some Vec_variants.(x.data.main /. x.data.ref) )
     }
 
   let plot_variants = [ absolute; relative ]
 
   let save_size_entry fmt key (data:elt) =
-      Fmt.pf fmt "%a %g %a@."
+      Fmt.pf fmt "@[<h>%a %g %a@]@."
         Stat.pp_full_key key
         data.ref
         (Variants.pp Fmt.float) data.main
 
   let save filename m = Stat.to_filename filename (fun fmt ->
-      Fmt.pf fmt "File Filesize:reverted Filesize:minimal_bugfix Filesize:strong_call_by_need@.";
+      Fmt.pf fmt "@[<h>File Filesize:reverted Filesize:minimal_bugfix Filesize:strong_call_by_need@]@.";
       By_files.iter (save_size_entry fmt) m
     )
 

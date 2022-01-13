@@ -55,16 +55,16 @@ let cloud dir (type a i) m (proj:(a,i Types.input) gen) =
   let prange (mn,mx) s = Seq.fold_left range (mn,mx) s.Types.data in
   let range = Seq.fold_left prange (1./.0., -1./.0.) points in
   let file_name = Io.out_name ?dir "%s_cloud.data" proj.info.name in
-  let pp_seq pp ppf x = Fmt.(seq pp) ppf x in
+  let pp_seq pp ppf x = Fmt.(seq ~sep:Fmt.sp pp) ppf x in
   let pp_entry ppf {Types.key; data=(x:a Seq.t)} = match proj.info.kind, x with
-    | No, x -> Fmt.pf ppf "%a %a@," Stat.pp_full_key key (pp_seq Fmt.float) x
-    | Yes, x -> Fmt.pf ppf "%a %a@," Stat.pp_full_key key (pp_seq Fmt.(pair float float)) x
+    | No, x -> Fmt.pf ppf "@[<h>%a %a@]@," Stat.pp_full_key key (pp_seq Fmt.float) x
+    | Yes, x -> Fmt.pf ppf "@[<h>%a %a@]@," Stat.pp_full_key key (pp_seq Fmt.(pair float float)) x
   in
   let pp_entries ppf = Seq.iter (pp_entry ppf) points in
   let info = proj.info in
   let pp_header ppf = match proj.info.kind with
     | Yes -> Fmt.pf ppf "File %s_mean %s_std@," info.name info.name
-    | No -> Fmt.pf ppf "File %s_mean@," info.name
+    | No -> Fmt.pf ppf "File %s@," info.name
     in
     Stat.to_filename file_name (fun ppf ->
         Fmt.pf ppf "@[<v>%t%t@]@." pp_header pp_entries
