@@ -81,6 +81,19 @@ let time_analysis dir log =
   Stat.to_filename (Io.out_name ?dir "pkgs.data")
     (By_pkg_aggregation.global_count (Seq.map Types.input @@ Types.By_files.to_seq m))
 
+module Size_analysis = struct
+  module By_files = Types.By_files
+
+  let read ref alts = By_files.fold (fun key ref_size m ->
+      match Variants.map (By_files.find key) alts with
+      | exception Not_found -> m
+      | all_sizes ->
+          let data = { Stat.ref = ref_size; main = all_sizes } in
+          By_files.add key data m
+    ) ref By_files.empty
+
+end
+
 
 let () =
   let open Cli in
