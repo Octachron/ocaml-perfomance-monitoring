@@ -1,4 +1,5 @@
-[("afl-persistent", "1.3"); ("bap-emacs-dot", "0.1");
+let trace =
+  [("afl-persistent", "1.3"); ("bap-emacs-dot", "0.1");
  ("bap-emacs-mode", "0.1"); ("bap-emacs-goodies", "0.1");
  ("bap-signatures", "2.4.0"); ("afl", "2.52b"); ("camlmix", "1.3.0");
  ("camlidl", "1.09"); ("conf-blas", "1"); ("conf-bluetooth", "1");
