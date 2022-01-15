@@ -1,3 +1,3 @@
-(library (name common) (modules Full_trace Alts) (wrapped false) )
+(library (name common) (modules Total_trace Full_trace Alts) (wrapped false) )
 (executable (name script) (modules Script) (libraries common runner))
 (executable (name analyze) (modules Analyze) (libraries common analyzer))
