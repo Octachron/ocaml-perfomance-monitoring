@@ -32,8 +32,11 @@ let dispatch f s = Variants.init (fun index -> f (Seq.map  (Types.Input.map (fun
 
 let dispatch' f s = Variants.init (fun index -> f (Seq.map  (fun x -> x.Variants.%(index)) s ) )
 
-
 let (.%()) = Variants.(.%())
+let regroup s =
+  let n = Seq.fold_left Stdlib.min Int.max_int  (Seq.map Array.length @@ Variants.to_seq s) in
+  Array.init n (fun i -> Variants.init (fun x -> s.%(x).(i))  ) 
+
 let alternatives = { V.initial; call_by_need }
 let names = { V.initial = "initial_bugfix"; call_by_need="strong_call_by_need" }
 
@@ -50,6 +53,17 @@ let hist_and_quantiles dir points (proj: _ P.t) =
     )
     ordered_points
 
+module Mq = Stat.Multi_quantiles(Variants)
+
+let multi_quantiles dir points (proj: _ P.t) =
+  let info = proj.info in
+  let points = Seq.filter_map (fun x ->  Option.map (fun data -> { x with Types.data }) (proj.f x)) points in
+  let extract (Stat.Ordered x) = x in
+  let ordered_points = Variants.map extract @@ dispatch Stat.order_statistic points in
+  let ordered_points = Mq.shuffle @@ regroup ordered_points in
+  Mq.save_quantiles (Io.out_name ?dir "%s_quantiles.data" info.name) ordered_points;
+  Mq.save_quantile_table names (Io.out_name ?dir "%s_quantile_table.md" info.name) ordered_points
+
 
 let time_analysis dir log =
    let m = Gen.compare ~ref:reverted ~alternatives log in
@@ -63,7 +77,7 @@ let time_analysis dir log =
   let points = Seq.map Types.input @@ Types.By_files.to_seq m in
   let projs = Min_proj.all in
   let () = List.iter
-      (hist_and_quantiles dir points)
+      (multi_quantiles dir points)
       (List.map P.remove_std projs)
   in
   let report_average ppf np =
@@ -130,7 +144,7 @@ module Size_analysis = struct
     save (Io.out_name ?dir "size_by_files.data") m;
     let points = Seq.map Types.input @@ Types.By_files.to_seq m in
     let () = List.iter
-        (hist_and_quantiles dir points)
+        (multi_quantiles dir points)
         (List.map P.remove_std plot_variants)
     in
     ()

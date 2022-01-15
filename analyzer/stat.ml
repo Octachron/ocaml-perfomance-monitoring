@@ -445,3 +445,56 @@ let pp_histogram h ppf =
 let save_histogram name h = to_filename name (pp_histogram  h)
 let save_quantiles name ordered = to_filename name (quantiles_data ordered)
 let save_quantile_table name filename ordered = to_filename filename (quantiles_table name ordered)
+
+
+module Multi_quantiles(A:Array_like.t) = struct
+
+  let key x =
+    let i =
+      match A.indices () with
+      | Seq.Nil -> raise (Invalid_argument "Empty array")
+      | Seq.Cons(x,_) -> x
+    in
+    Q.key x.A.%(i)
+
+  let shuffle o = Array.map (fun a -> {Types.key=key a; data=A.map Q.value a}) o
+
+  type data = float A.t Types.input array
+  let data (ordered_points: data) ppf =
+    Array.iteri
+    (fun i x -> Fmt.pf ppf "@[<h>%g %a %a@]@."
+        ((100. *. float i) /. float (Array.length ordered_points))
+        (A.pp Fmt.float) (Q.value x)
+        pp_full_key (Q.key x)
+    )
+    ordered_points
+
+
+  let (.$()) ordered_points i = ordered_points.( int_of_float @@ i *. float (Array.length ordered_points)  )
+
+  let table names (ordered_points:data) ppf =
+    let cell pp ppf x =
+      let sep ppf () = Fmt.pf ppf "|@ " in
+      Fmt.seq ~sep pp ppf (A.to_seq x)
+    in
+    let title ppf n = Fmt.pf ppf "%s quantiles" n in
+    let hline ppf n =
+      let n = String.length n + String.length " quantiles" in
+      Fmt.pf ppf "%s" (String.init n (fun _ -> '-'))
+    in
+    let row ppf i =
+      Fmt.pf ppf "@[<h>| %g%% | %a |@]@," (100. *. i) (cell Fmt.float) (Q.value @@  ordered_points.$(i)) in
+    Fmt.pf ppf "@[<v>\
+                @[<h>| %% |%a|@]@,\
+                @[<h>|---|%a|@]@,"
+      (cell title) names
+      (cell hline) names
+    ;
+    List.iter (row ppf) [0.01; 0.1; 0.25; 0.5; 0.75;0.9;0.99;0.999];
+    Fmt.pf ppf "@]@."
+
+  let save_quantiles name ordered = to_filename name (data ordered)
+  let save_quantile_table name filename ordered = to_filename filename (table name ordered)
+
+
+end
