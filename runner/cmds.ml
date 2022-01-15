@@ -16,7 +16,7 @@ let reinstall ~switch ~pkg =
   with_switch ~switch "opam reinstall -b --yes %s" (Pkg.name pkg)
 
 let install ~switch ~pkg =
-  with_switch ~switch "opam install -b --yes %s" (Pkg.full pkg)
+  with_switch ~switch "opam install --no-depexts -b --yes %s" (Pkg.full pkg)
 
 let opam_var ~switch ~pkg var =
   let inp, _ = Unix.open_process (Format.asprintf "(%t && opam var %s:%s)" (set_switch switch) (Pkg.name pkg) var) in
