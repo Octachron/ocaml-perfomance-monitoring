@@ -22,9 +22,9 @@ struct
 
   let add x m =
     match x with
-    | Data.File_size { value={kind=Cmi|Cmo|Cmx;_}; _ }
+    | Data.File_size { value={kind=Cmi|Cmo|Cmx|Cmti;_}; _ }
       -> m
-    | Data.File_size {origin; key; value={kind=Cmt|Cmti; size}} ->
+    | Data.File_size {origin; key; value={kind=Cmt; size}} ->
       let observation = float_of_int size in
       let key = {Data.pkg=origin.pkg; name=key} in
       let sizes =
