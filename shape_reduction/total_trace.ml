@@ -33,7 +33,7 @@ let trace =
  ("conf-samplerate", "1"); ("conf-sdl-image", "1"); ("conf-aclocal", "2");
  ("conf-sdl-mixer", "1"); ("conf-sdl-ttf", "1"); ("conf-sdl2", "1");
  ("conf-sdl2-image", "1"); ("conf-sdl2-ttf", "1"); ("conf-soundtouch", "1");
- ("conf-sqlite3", "1"); ("conf-srt", "1"); ("conf-taglib", "1");
+ ("conf-sqlite3", "1"); ("conf-taglib", "1");
  ("conf-tcl", "1"); ("cmdliner", "1.0.4"); ("conf-tk", "1");
  ("conf-zlib", "1"); ("conf-zmq", "0.1"); ("ctypes-foreign", "0.18.0");
  ("libtensorflow", "0.1"); ("dune", "2.9.1");
@@ -101,7 +101,7 @@ let trace =
  ("interval_intel", "1.5.1"); ("ogg", "0.7.0"); ("oniguruma", "0.1.1");
  ("ott", "0.31"); ("hevea", "2.35"); ("ffmpeg-avfilter", "1.1.1");
  ("ffmpeg-swscale", "1.1.1"); ("flac", "0.3.0"); ("mirage-crypto", "0.10.5");
- ("ocamlfuse", "2.7.1-cvs7"); ("parmap", "1.2.4"); ("portaudio", "0.2.3");
+  ("parmap", "1.2.4"); ("portaudio", "0.2.3");
  ("seq", "base"); ("ffmpeg-avcodec", "1.1.1"); ("opus", "0.2.1");
  ("pulseaudio", "0.1.5"); ("samplerate", "0.1.6"); ("ocamlfind", "1.9.1");
  ("feat-core", "20220101"); ("hkdf", "1.0.4"); ("lwd", "0.1");
