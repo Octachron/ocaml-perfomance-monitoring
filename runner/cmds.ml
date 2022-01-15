@@ -32,6 +32,6 @@ let (<!>) n err =
   if n = 0 then () else (err Fmt.stderr ; exit n)
 
 
-let remove_pkg ~switch pkg =
-  cmd "(%t && opam remove --yes %s)" (set_switch switch) (Pkg.name pkg)
-  <!> Format.dprintf "Failed to remove %S" (Pkg.full pkg)
+let remove_pkg ~switch pkgs =
+  cmd "(%t && opam remove --yes %s)" (set_switch switch) (String.concat " " @@ List.map Pkg.name pkgs)
+  <!> Format.dprintf "Failed to remove %a" (Fmt.list Fmt.Dump.string) (List.map Pkg.full pkgs)

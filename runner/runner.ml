@@ -88,7 +88,7 @@ let rec multisample n ~log ~switch ~pkg =
     end
 
 let pkg_line n ~log ~switch pkgs  =
-  List.iter (Cmds.remove_pkg ~switch) (List.rev pkgs);
+  Cmds.remove_pkg ~switch (List.rev pkgs);
   List.iter  (fun pkg ->
       multisample n ~log ~switch ~pkg
     ) pkgs
