@@ -19,8 +19,8 @@ let irmin =
    ("uri", "4.2.0"); ("lwt", "5.5.0"); ("logs", "0.7.0"); ("irmin", "2.2.0")]
 
 let () = Runner.run
-~n:1
+~n:5
 ~switches:Alts.all
 ~context:[]
-~pkgs:Total_trace.trace
+~pkgs:Full_trace.pkgs
 ~log:Sys.argv.(1)

@@ -1,6 +1,5 @@
 let pkgs =
-  [("conf-findutils", "1"); ("conf-gtk2", "1"); ("conf-libssl", "3");
- ("conf-gmp", "3"); ("conf-libev", "4-12"); ("cmdliner", "1.0.4");
+  [ ("cmdliner", "1.0.4");
  ("dune", "2.9.1"); ("bheap", "2.0.0"); ("bigarray-compat", "1.0.0");
  ("jane-street-headers", "v0.14.0"); ("duration", "0.2.0");
  ("base64", "3.5.0"); ("cpuid", "0.1.2"); ("csexp", "1.5.1");
