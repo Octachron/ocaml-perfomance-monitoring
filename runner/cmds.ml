@@ -12,21 +12,35 @@ let set_switch switch ppf = Fmt.pf ppf "eval $(opam env --set-switch --switch=%S
 let with_switch ~switch fmt =
   cmd ("(%t &&" ^^ fmt ^^ ")") (set_switch switch)
 
-let reinstall ~switch ~pkg =
-  with_switch ~switch "opam reinstall -b --yes %s" (Pkg.name pkg)
+let rec with_retry ~msg ~retry f =
+  match f (), retry with
+  | 0, _ | _, 0 -> 0
+  | _, retry ->
+    Fmt.(pf stderr) "Error during %t. Retrying %d times.@." msg retry;
+    with_retry ~msg ~retry:(retry - 1) f
 
-let install ~switch ~pkg =
-  with_switch ~switch "opam install --no-depexts -b --yes %s" (Pkg.full pkg)
+let reinstall ~retry ~switch ~pkg =
+  with_retry
+    ~msg:(Format.dprintf "reinstallation of %s"  (Pkg.full pkg))
+    ~retry
+    (fun () -> with_switch ~switch "opam reinstall -b --yes %s" (Pkg.name pkg))
+
+let install ~retry  ~switch ~pkg =
+  with_retry ~retry
+    ~msg:(Format.dprintf "reinstallation of %s"  (Pkg.full pkg))
+    (fun () -> with_switch ~switch "opam install --no-depexts -b --yes %s" (Pkg.full pkg))
 
 let opam_var ~switch ~pkg var =
   let inp, _ = Unix.open_process (Format.asprintf "(%t && opam var %s:%s)" (set_switch switch) (Pkg.name pkg) var) in
   input_line inp
 
 
-let execute ~dir ~switch ~pkg =
+let execute ~retry ~dir ~switch ~pkg =
   putenv_fmt "OCAMLPARAM" ",_,timings=1,dump-dir=%s" dir;
   putenv_fmt "OPAMJOBS" "1";
-  reinstall ~switch ~pkg
+  reinstall ~retry ~switch ~pkg
+
+
 
 let (<!>) n err =
   if n = 0 then () else (err Fmt.stderr ; exit n)

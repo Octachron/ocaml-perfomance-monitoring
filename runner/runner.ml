@@ -73,36 +73,36 @@ let read_result ~build_dir  ~switch ~pkg ~dir =
 
 let (<!>) = Cmds.(<!>)
 
-let sample ~log ~switch ~pkg =
+let sample ~retry ~log ~switch ~pkg =
   let dir = pkg_dir ~switch ~pkg in
   let () =  Sys.mkdir dir 0o777 in
-  Cmds.execute ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" (Pkg.full pkg);
+  Cmds.execute ~retry ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" (Pkg.full pkg);
   let build_dir = Cmds.opam_var ~switch ~pkg "build" in
   Seq.iter (Log.write_entry log) (read_result ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
 
-let rec multisample n ~log ~switch ~pkg =
+let rec multisample n ~retry ~log ~switch ~pkg =
   if n = 0 then () else
     begin
-      sample ~log ~switch ~pkg;
-      multisample (n-1) ~log  ~pkg ~switch
+      sample ~retry ~log ~switch ~pkg;
+      multisample ~retry (n-1) ~log  ~pkg ~switch
     end
 
-let pkg_line n ~log ~switch pkgs  =
+let pkg_line n ~retry ~log ~switch pkgs  =
   Cmds.remove_pkg ~switch (List.rev pkgs);
   List.iter  (fun pkg ->
-      multisample n ~log ~switch ~pkg
+      multisample n ~retry ~log ~switch ~pkg
     ) pkgs
 
-let install_context ~switches ~pkgs = List.iter (fun switch ->
+let install_context ~retry ~switches ~pkgs = List.iter (fun switch ->
     List.iter (fun pkg ->
-        Cmds.install ~switch ~pkg
+        Cmds.install ~retry ~switch ~pkg
         <!> Format.dprintf "Installation failure: %s/%s" switch (Pkg.full pkg)
       ) pkgs
   ) switches
 
-let start ~n ~switches ~log ~context ~pkgs =
-  let () = install_context ~switches ~pkgs:context in
-  let experiment switch = pkg_line ~switch ~log n pkgs in
+let start ~n ~retry ~switches ~log ~context ~pkgs =
+  let () = install_context ~retry:3 ~switches ~pkgs:context in
+  let experiment switch = pkg_line ~retry ~switch ~log n pkgs in
   List.iter experiment switches
 
 let with_file filename f =
@@ -111,10 +111,11 @@ let with_file filename f =
   Fun.protect (fun () -> f ppf)
     ~finally:(fun () -> close_out x)
 
-let run ~n ~log ~switches ~context ~pkgs =
+let run ~n ~retry ~log ~switches ~context ~pkgs =
   with_file log (fun log ->
       start ~log
         ~n
+        ~retry
         ~switches
         ~context
         ~pkgs

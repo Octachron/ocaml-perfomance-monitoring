@@ -16,6 +16,7 @@ let hard =
 let () = Runner.run
  ~log:"type_abstraction"
  ~n:4
+ ~retry:3
  ~switches:[before;after]
  ~context:[]
  ~pkgs:simple
