@@ -1,5 +1,3 @@
-module Pkg = Cmds.Pkg
-
 let output_dir name = "/tmp/" ^ name
 
 let uuid name =
@@ -118,6 +116,6 @@ let run ~n ~retry ~log ~switches ~context ~pkgs =
         ~retry
         ~switches
         ~context
-        ~pkgs
+        ~pkgs:(List.map (fun (name,version) -> Pkg.make name version) pkgs)
     )
 

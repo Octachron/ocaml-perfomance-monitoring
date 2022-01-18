@@ -3,11 +3,6 @@ let cmd fmt = Format.kasprintf Sys.command fmt
 let putenv_fmt key fmt =
   Format.kasprintf (Unix.putenv key) fmt
 
-module Pkg = struct
-  let name (x,_y) = x
-  let full (x,y) = Format.asprintf "%s.%s" x y
-end
-
 let set_switch switch ppf = Fmt.pf ppf "eval $(opam env --set-switch --switch=%S)" switch
 let with_switch ~switch fmt =
   cmd ("(%t &&" ^^ fmt ^^ ")") (set_switch switch)
