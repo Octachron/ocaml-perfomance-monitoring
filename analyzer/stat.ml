@@ -472,7 +472,7 @@ module Multi_quantiles(A:Array_like.t) = struct
 
   let (.$()) ordered_points i = ordered_points.( int_of_float @@ i *. float (Array.length ordered_points)  )
 
-  let table names (ordered_points:data) ppf =
+  let table names qs (ordered_points:data) ppf =
     let cell pp ppf x =
       let sep ppf () = Fmt.pf ppf "|@ " in
       Fmt.seq ~sep pp ppf (A.to_seq x)
@@ -490,11 +490,11 @@ module Multi_quantiles(A:Array_like.t) = struct
       (cell title) names
       (cell hline) names
     ;
-    List.iter (row ppf) [0.01; 0.1; 0.25; 0.5; 0.75;0.9;0.99;0.999];
+    List.iter (row ppf) qs;
     Fmt.pf ppf "@]@."
 
   let save_quantiles name ordered = to_filename name (data ordered)
-  let save_quantile_table name filename ordered = to_filename filename (table name ordered)
+  let save_quantile_table names qs filename ordered = to_filename filename (table names qs ordered)
 
 
 end

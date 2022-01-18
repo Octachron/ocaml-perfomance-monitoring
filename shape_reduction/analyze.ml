@@ -62,7 +62,9 @@ let multi_quantiles dir points (proj: _ P.t) =
   let ordered_points = Variants.map extract @@ dispatch Stat.order_statistic points in
   let ordered_points = Mq.shuffle @@ regroup ordered_points in
   Mq.save_quantiles (Io.out_name ?dir "%s_quantiles.data" info.name) ordered_points;
-  Mq.save_quantile_table names (Io.out_name ?dir "%s_quantile_table.md" info.name) ordered_points
+  Mq.save_quantile_table names
+    [0.01; 0.1; 0.25; 0.5; 0.75;0.9;0.99;0.999;0.9999]
+    (Io.out_name ?dir "%s_quantile_table.md" info.name) ordered_points
 
 
 let time_analysis dir log =
