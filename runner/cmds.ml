@@ -20,10 +20,10 @@ let reinstall ~retry ~switch ~pkg =
     ~retry
     (fun () -> with_switch ~switch "opam reinstall -b --yes %s" (Pkg.name pkg))
 
-let install ~retry  ~switch ~pkg =
+let install ~retry  ~switch ~pkgs =
   with_retry ~retry
-    ~msg:(Format.dprintf "reinstallation of %s"  (Pkg.full pkg))
-    (fun () -> with_switch ~switch "opam install --no-depexts -b --yes %s" (Pkg.full pkg))
+    ~msg:(Format.dprintf "reinstallation of %a"  (Fmt.(list string))  (List.map Pkg.full pkgs))
+    (fun () -> with_switch ~switch "opam install --no-depexts -b --yes %s" (String.concat " " @@ List.map Pkg.name pkgs))
 
 let opam_var ~switch ~pkg var =
   let inp, _ = Unix.open_process (Format.asprintf "(%t && opam var %s:%s)" (set_switch switch) (Pkg.name pkg) var) in

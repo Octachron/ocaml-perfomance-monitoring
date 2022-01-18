@@ -97,10 +97,8 @@ let clean ~switches ~pkgs () = List.iter (fun switch ->
   ) switches
 
 let install_context ~retry ~switches ~pkgs = List.iter (fun switch ->
-    List.iter (fun pkg ->
-        Cmds.install ~retry ~switch ~pkg
-        <!> Format.dprintf "Installation failure: %s/%s" switch (Pkg.full pkg)
-      ) pkgs
+    Cmds.install ~retry ~switch ~pkgs
+        <!> Format.dprintf "Installation failure: %s/%a" switch Fmt.(list string) (List.map Pkg.full pkgs)
   ) switches
 
 let experiment ~retry ~log {Zipper.switch;pkg;_} =
