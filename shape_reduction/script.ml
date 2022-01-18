@@ -24,6 +24,6 @@ let () =
     ~retry:3
     ~switches:Alts.all
     ~context:[]
-    ~pkgs:Full_trace.pkgs
+    ~pkgs:Total_trace.trace
     ~log:Sys.argv.(1)
     ~status_file:"shape.json"
