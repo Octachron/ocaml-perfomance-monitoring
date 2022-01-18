@@ -23,7 +23,7 @@ let () =
     ~n:1
     ~retry:3
     ~switches:Alts.all
-    ~context:[]
-    ~pkgs:Total_trace.trace
+    ~context:(List.map (fun (x,y) -> Pkg.make x y) Total_trace.context)
+    ~pkgs:Total_trace.pkgs
     ~log:Sys.argv.(1)
     ~status_file:"shape.json"
