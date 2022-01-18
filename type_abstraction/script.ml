@@ -20,3 +20,4 @@ let () = Runner.run
  ~switches:[before;after]
  ~context:[]
  ~pkgs:simple
+ ~status_file:"ta.json"

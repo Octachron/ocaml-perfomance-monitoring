@@ -20,9 +20,10 @@ let irmin =
 
 let () =
   Runner.run
-    ~n:5
+    ~n:1
     ~retry:3
     ~switches:Alts.all
     ~context:[]
     ~pkgs:Full_trace.pkgs
     ~log:Sys.argv.(1)
+    ~status_file:"shape.json"

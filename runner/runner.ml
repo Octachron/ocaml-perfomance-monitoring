@@ -91,6 +91,11 @@ let pkg_line n ~retry ~log ~switch pkgs  =
       multisample n ~retry ~log ~switch ~pkg
     ) pkgs
 
+
+let clean ~switches ~pkgs () = List.iter (fun switch ->
+     Cmds.remove_pkg ~switch (List.rev pkgs)
+  ) switches
+
 let install_context ~retry ~switches ~pkgs = List.iter (fun switch ->
     List.iter (fun pkg ->
         Cmds.install ~retry ~switch ~pkg
@@ -98,24 +103,41 @@ let install_context ~retry ~switches ~pkgs = List.iter (fun switch ->
       ) pkgs
   ) switches
 
-let start ~n ~retry ~switches ~log ~context ~pkgs =
-  let () = install_context ~retry:3 ~switches ~pkgs:context in
-  let experiment switch = pkg_line ~retry ~switch ~log n pkgs in
-  List.iter experiment switches
+let experiment ~retry ~log {Zipper.switch;pkg;_} =
+  sample ~retry ~log ~switch ~pkg
 
-let with_file filename f =
-  let x = open_out filename in
+let start ~n ~retry ~switches ~status_file ~log_name ~log ~context ~pkgs =
+  let () = clean ~switches ~pkgs () in
+  let () = install_context ~retry:3 ~switches ~pkgs:context in
+  let z = Zipper.start ~retry ~log:log_name ~switches ~pkgs ~sample_size:n in
+  Zipper.tracked_iter ~status_file (experiment ~retry ~log) z
+
+
+
+let with_file ?(mode=[Open_wronly; Open_creat; Open_append; Open_binary]) filename f =
+  let x = open_out_gen mode 0o777 filename in
   let ppf = Format.formatter_of_out_channel x in
   Fun.protect (fun () -> f ppf)
     ~finally:(fun () -> close_out x)
 
-let run ~n ~retry ~log ~switches ~context ~pkgs =
-  with_file log (fun log ->
-      start ~log
+let with_file_append filename f =
+  with_file
+    ~mode:[Open_wronly; Open_creat; Open_append; Open_binary] filename f
+
+let restart ~status_file  =
+  let z = Zipper.t_of_yojson (Yojson.Safe.from_file status_file) in
+  with_file_append z.log (fun log ->
+      Zipper.tracked_iter ~status_file (experiment ~retry:z.retry ~log) z
+    )
+
+
+
+let run ~n ~retry ~status_file ~log:log_name ~switches ~context ~pkgs =
+  with_file log_name (fun log ->
+      start ~log ~log_name ~status_file
         ~n
         ~retry
         ~switches
         ~context
         ~pkgs:(List.map (fun (name,version) -> Pkg.make name version) pkgs)
     )
-
