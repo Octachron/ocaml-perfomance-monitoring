@@ -26,4 +26,4 @@ let () =
     ~context:(List.map (fun (x,y) -> Pkg.make x y) Total_trace.context)
     ~pkgs:Total_trace.pkgs
     ~log:Sys.argv.(1)
-    ~status_file:"shape.json"
+    ~status_file:Sys.argv.(2)
