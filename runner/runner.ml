@@ -32,9 +32,11 @@ let file_size ~pkg ~switch ~filename kind s =
   }
 
 let rec crawl_dir ~switch ~pkg dir =
-  Seq.concat @@ Seq.map (crawl_file ~switch ~pkg dir) @@ Array.to_seq (Sys.readdir dir)
-and crawl_file ~switch ~pkg dir filename =
-  let path = Filename.concat dir filename in
+  Seq.concat @@ Seq.map (crawl_file ~switch ~pkg)
+  @@ Seq.filter (fun (_, path) -> Sys.file_exists path)
+  @@ Seq.map (fun f -> f, Filename.concat dir f)
+  @@ Array.to_seq (Sys.readdir dir)
+and crawl_file ~switch ~pkg (filename,path) =
   if Sys.is_directory path then
     crawl_dir ~switch ~pkg path
   else
