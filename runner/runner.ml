@@ -126,6 +126,11 @@ let with_file_append filename f =
 
 let restart ~status_file  =
   let z = Zipper.t_of_yojson (Yojson.Safe.from_file status_file) in
+  let switches = Zipper.switches z in
+  let sampled = z.pkgs.sampled in
+  let todo = z.pkgs.todo in
+  let () = clean ~switches ~pkgs:todo () in
+  let () = install_context ~retry:3 ~switches ~pkgs:sampled in
   with_file_append z.log (fun log ->
       Zipper.tracked_iter ~status_file (experiment ~retry:z.retry ~log) z
     )

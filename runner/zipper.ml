@@ -118,8 +118,12 @@ module Main = struct
         next {
           z with pkgs
         }
+
+  let pkgs z = z.pkgs.sampled @ pkg z :: z.pkgs.todo
 end
 
+let switches = Main.switches
+let pkgs = Main.pkgs
 
 let status_file ~file (z:t) =
   Yojson.Safe.to_file file (yojson_of_t z)
