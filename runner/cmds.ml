@@ -18,7 +18,7 @@ let reinstall ~retry ~switch ~pkg =
   with_retry
     ~msg:(Format.dprintf "reinstallation of %s"  (Pkg.full pkg))
     ~retry
-    (fun () -> with_switch ~switch "opam reinstall -b --yes %s" (Pkg.name pkg))
+    (fun () -> with_switch ~switch "opam reinstall --no-depexts -b --yes %s" (Pkg.name pkg))
 
 let install ~retry  ~switch ~pkgs =
   with_retry ~retry
@@ -42,5 +42,5 @@ let (<!>) n err =
 
 
 let remove_pkg ~switch pkgs =
-  cmd "(%t && opam remove --yes %s)" (set_switch switch) (String.concat " " @@ List.map Pkg.name pkgs)
+  cmd "(%t && opam remove --no-depexts --yes %s)" (set_switch switch) (String.concat " " @@ List.map Pkg.name pkgs)
   <!> Format.dprintf "Failed to remove %a" (Fmt.list Fmt.Dump.string) (List.map Pkg.full pkgs)
