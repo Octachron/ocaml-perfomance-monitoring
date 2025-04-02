@@ -42,7 +42,23 @@ let read_lines filename =
   r
 
 
-let scan_entry s = Scanf.sscanf s " %fs %s" (fun time name -> name, time )
+let scan_entry s =
+  let s = String.trim s in
+  let segments = String.split_on_char ' ' s in
+  let segments = List.filter (function "" -> false | _ -> true) segments in
+  match segments with
+  | [t; name] | [t;_;_;_;name] ->
+    let time =
+      if String.for_all ((=) '-') t then 0.
+      else match Scanf.sscanf t "%fs" Fun.id with
+        | x -> x
+        | exception Scanf.Scan_failure m ->
+          Format.eprintf "@[<v>Failing to parse %s: %s@]@." t m;
+          exit 2
+    in
+    name, time
+  | _ ->
+    Format.eprintf "Unknown format %s@." s; exit 2
 
 let rec parse_group parent_indent l =
   match l with
