@@ -1,3 +1,6 @@
+
+include struct
+  open Ppx_yojson_conv_lib.Yojson_conv
 module Pkg = struct
   type t = Pkg.t = { name:string; version:string }
   [@@deriving yojson]
@@ -22,7 +25,7 @@ type t = { switches: switch list; retry:int; log:string; pkgs: (Pkg.t,pkg) zippe
 and pkg = (switch, variant) zipper
 and variant = { sampled:int; sample:sample }
 [@@deriving yojson]
-
+end
 
 type ('a,'b) status =
   | Ongoing of 'a
