@@ -50,7 +50,7 @@ and crawl_file ~switch ~pkg (filename,path) =
 
 
 
-let read_result ~build_dir ~slices ~switch ~pkg ~dir =
+let read_result ~with_filesize ~build_dir ~slices ~switch ~pkg ~dir =
   let files = Array.to_list @@ Sys.readdir dir in
   let read_file filename =
     if is_prefix ~prefix:"profile" (Filename.basename filename) then
@@ -66,33 +66,34 @@ let read_result ~build_dir ~slices ~switch ~pkg ~dir =
     |> Seq.map (Data.times ~switch ~pkg ~slices)
     |> Seq.concat_map split_timings
   in
-  let sizes =
-    crawl_dir ~switch ~pkg build_dir
-  in
-  Seq.append timings sizes
+  if not with_filesize then timings else
+    let sizes =
+      crawl_dir ~switch ~pkg build_dir
+    in
+    Seq.append timings sizes
 
 let (<!>) = Cmds.(<!>)
 
-let sample ~retry ~log ~slices ~switch ~pkg =
+let sample ~retry ~log ~slices ~with_filesize ~switch ~pkg =
   let dir = pkg_dir ~switch ~pkg in
   let () =  Sys.mkdir dir 0o777 in
   Cmds.execute ~retry ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" (Pkg.full pkg);
   let build_dir = Cmds.opam_var ~switch ~pkg "build" in
   Seq.iter
     (Log.write_entry log)
-    (read_result ~slices ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
+    (read_result ~with_filesize ~slices ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
 
-let rec multisample n ~retry ~log ~slices ~switch ~pkg =
+let rec multisample n ~with_filesize ~retry ~log ~slices ~switch ~pkg =
   if n = 0 then () else
     begin
-      sample ~retry ~log ~switch ~pkg ~slices;
-      multisample ~retry (n-1) ~slices ~log  ~pkg ~switch
+      sample ~with_filesize ~retry ~log ~switch ~pkg ~slices;
+      multisample ~with_filesize ~retry (n-1) ~slices ~log  ~pkg ~switch
     end
 
-let pkg_line n ~retry ~log ~slices ~switch pkgs  =
+let pkg_line n ~with_filesize ~retry ~log ~slices ~switch pkgs  =
   Cmds.remove_pkg ~switch (List.rev pkgs);
   List.iter  (fun pkg ->
-      multisample n ~retry ~slices ~log ~switch ~pkg
+      multisample ~with_filesize n ~retry ~slices ~log ~switch ~pkg
     ) pkgs
 
 
@@ -100,19 +101,23 @@ let clean ~switches ~pkgs () = List.iter (fun switch ->
      Cmds.remove_pkg ~switch (List.rev pkgs)
   ) switches
 
-let install_context ~retry ~switches ~pkgs = List.iter (fun switch ->
-    Cmds.install ~retry ~switch ~pkgs
+let install_context ~retry ~switches ~pkgs =
+  match pkgs with
+  | [] -> ()
+  | _ ->
+    List.iter (fun switch ->
+        Cmds.install ~retry ~switch ~pkgs
         <!> Format.dprintf "Installation failure: %s/%a" switch Fmt.(list string) (List.map Pkg.full pkgs)
-  ) switches
+      ) switches
 
 let experiment ~retry ~log ~slices {Zipper.switch;pkg;_} =
   sample ~retry ~log ~switch ~slices ~pkg
 
-let start ~n ~retry ~slices ~switches ~status_file ~log_name ~log ~context ~pkgs =
+let start ~n ~retry ~slices ~with_filesize ~switches ~status_file ~log_name ~log ~context ~pkgs =
   let () = clean ~switches ~pkgs () in
   let () = install_context ~retry:3  ~switches ~pkgs:context in
-  let z = Zipper.start ~slices ~retry ~log:log_name ~switches ~pkgs ~sample_size:n in
-  Zipper.tracked_iter ~status_file (experiment ~slices ~retry ~log) z
+  let z = Zipper.start ~with_filesize ~slices ~retry ~log:log_name ~switches ~pkgs ~sample_size:n in
+  Zipper.tracked_iter ~status_file (experiment ~with_filesize ~slices ~retry ~log) z
 
 
 
@@ -130,20 +135,23 @@ let restart ~status_file  =
   let z = Zipper.t_of_yojson (Yojson.Safe.from_file status_file) in
   let switches = Zipper.switches z in
   let slices = Zipper.slices z in
+  let with_filesize = Zipper.with_filesize z in
   let sampled = z.pkgs.sampled in
   let todo = z.pkgs.todo in
   let () = clean ~switches ~pkgs:todo () in
   let () = install_context ~retry:3 ~switches ~pkgs:sampled in
   with_file_append z.log (fun log ->
-      Zipper.tracked_iter ~status_file (experiment ~slices ~retry:z.retry ~log) z
+      Zipper.tracked_iter ~status_file
+        (experiment ~with_filesize ~slices ~retry:z.retry ~log) z
     )
 
 
 
-let run ~n ~retry ~status_file ~log:log_name ~switches ~context ~pkgs =
+let run ~n ~with_filesize ~slices ~retry ~status_file ~log:log_name ~switches ~context ~pkgs =
   with_file log_name (fun log ->
-      start ~log ~log_name ~status_file
+      start ~slices ~log ~log_name ~status_file
         ~n
+        ~with_filesize
         ~retry
         ~switches
         ~context

@@ -25,6 +25,7 @@ type t = {
   switches: switch list;
   retry:int;
   log:string;
+  with_filesize:bool;
   slices: string list;
   pkgs: (Pkg.t,pkg) zipper
 }
@@ -95,7 +96,7 @@ module Main = struct
   let iter f z =
     Option.iter (Pkgz.iter f) z.pending
 
-  let start ~retry ~log ~slices ~switches ~pkgs ~sample_size =
+  let start ~retry ~log ~with_filesize ~slices ~switches ~pkgs ~sample_size =
     match pkgs with
     | [] -> assert false
     | pkg :: todo ->
@@ -105,7 +106,7 @@ module Main = struct
         todo;
       }
       in
-      { pkgs; switches; retry; log; slices }
+      { pkgs; switches; with_filesize; retry; log; slices }
 
   let rec next (z:t) =
     let pkgs = z.pkgs in
@@ -135,6 +136,7 @@ end
 let switches = Main.switches
 let pkgs = Main.pkgs
 let slices = Main.slices
+let with_filesize z = z.with_filesize
 
 let status_file ~file (z:t) =
   Yojson.Safe.to_file file (yojson_of_t z)

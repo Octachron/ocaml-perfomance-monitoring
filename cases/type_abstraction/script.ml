@@ -17,6 +17,7 @@ let () = Runner.run
  ~log:"type_abstraction"
  ~slices:["typing"]
  ~n:4
+ ~with_filesize:false
  ~retry:3
  ~switches:[before;after]
  ~context:[]
