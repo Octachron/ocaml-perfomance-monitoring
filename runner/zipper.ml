@@ -21,7 +21,13 @@ type ('a,'b) zipper = {
   [@@deriving yojson]
 
 
-type t = { switches: switch list; retry:int; log:string; pkgs: (Pkg.t,pkg) zipper }
+type t = {
+  switches: switch list;
+  retry:int;
+  log:string;
+  slices: string list;
+  pkgs: (Pkg.t,pkg) zipper
+}
 and pkg = (switch, variant) zipper
 and variant = { sampled:int; sample:sample }
 [@@deriving yojson]
@@ -50,7 +56,7 @@ module Pkgz = struct
   let switch x = Variant.switch x.pending
   let sample_size x = Variant.sample_size x.pending
   let sample x = Variant.sample x.pending
-  let start ~switches ~sample_size pkg =
+  let start  ~switches ~sample_size pkg =
     match switches with
     | [] -> assert false
     | switch :: todo ->
@@ -82,13 +88,14 @@ module Main = struct
   let pkg x = Pkgz.pkg x.pkgs.pending
   let switch x = Pkgz.switch x.pkgs.pending
   let switches z = z.switches
+  let slices z = z.slices
   let sample_size x = Pkgz.sample_size x.pkgs.pending
   let sample x = Pkgz.sample x.pkgs.pending
 
   let iter f z =
     Option.iter (Pkgz.iter f) z.pending
 
-  let start ~retry ~log ~switches ~pkgs ~sample_size =
+  let start ~retry ~log ~slices ~switches ~pkgs ~sample_size =
     match pkgs with
     | [] -> assert false
     | pkg :: todo ->
@@ -98,7 +105,7 @@ module Main = struct
         todo;
       }
       in
-      { pkgs; switches; retry; log }
+      { pkgs; switches; retry; log; slices }
 
   let rec next (z:t) =
     let pkgs = z.pkgs in
@@ -127,6 +134,7 @@ end
 
 let switches = Main.switches
 let pkgs = Main.pkgs
+let slices = Main.slices
 
 let status_file ~file (z:t) =
   Yojson.Safe.to_file file (yojson_of_t z)

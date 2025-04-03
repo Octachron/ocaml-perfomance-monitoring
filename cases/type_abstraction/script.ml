@@ -15,6 +15,7 @@ let hard =
 
 let () = Runner.run
  ~log:"type_abstraction"
+ ~slices:["typing"]
  ~n:4
  ~retry:3
  ~switches:[before;after]

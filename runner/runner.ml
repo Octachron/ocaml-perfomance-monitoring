@@ -50,7 +50,7 @@ and crawl_file ~switch ~pkg (filename,path) =
 
 
 
-let read_result ~build_dir  ~switch ~pkg ~dir =
+let read_result ~build_dir ~slices ~switch ~pkg ~dir =
   let files = Array.to_list @@ Sys.readdir dir in
   let read_file filename =
     if is_prefix ~prefix:"profile" (Filename.basename filename) then
@@ -63,7 +63,7 @@ let read_result ~build_dir  ~switch ~pkg ~dir =
     files
     |> List.to_seq
     |> Seq.filter_map read_file
-    |> Seq.map (Data.typechecking_times ~switch ~pkg)
+    |> Seq.map (Data.times ~switch ~pkg ~slices)
     |> Seq.concat_map split_timings
   in
   let sizes =
@@ -73,24 +73,26 @@ let read_result ~build_dir  ~switch ~pkg ~dir =
 
 let (<!>) = Cmds.(<!>)
 
-let sample ~retry ~log ~switch ~pkg =
+let sample ~retry ~log ~slices ~switch ~pkg =
   let dir = pkg_dir ~switch ~pkg in
   let () =  Sys.mkdir dir 0o777 in
   Cmds.execute ~retry ~switch ~pkg ~dir <!> Format.dprintf "Failed to install %s" (Pkg.full pkg);
   let build_dir = Cmds.opam_var ~switch ~pkg "build" in
-  Seq.iter (Log.write_entry log) (read_result ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
+  Seq.iter
+    (Log.write_entry log)
+    (read_result ~slices ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
 
-let rec multisample n ~retry ~log ~switch ~pkg =
+let rec multisample n ~retry ~log ~slices ~switch ~pkg =
   if n = 0 then () else
     begin
-      sample ~retry ~log ~switch ~pkg;
-      multisample ~retry (n-1) ~log  ~pkg ~switch
+      sample ~retry ~log ~switch ~pkg ~slices;
+      multisample ~retry (n-1) ~slices ~log  ~pkg ~switch
     end
 
-let pkg_line n ~retry ~log ~switch pkgs  =
+let pkg_line n ~retry ~log ~slices ~switch pkgs  =
   Cmds.remove_pkg ~switch (List.rev pkgs);
   List.iter  (fun pkg ->
-      multisample n ~retry ~log ~switch ~pkg
+      multisample n ~retry ~slices ~log ~switch ~pkg
     ) pkgs
 
 
@@ -103,14 +105,14 @@ let install_context ~retry ~switches ~pkgs = List.iter (fun switch ->
         <!> Format.dprintf "Installation failure: %s/%a" switch Fmt.(list string) (List.map Pkg.full pkgs)
   ) switches
 
-let experiment ~retry ~log {Zipper.switch;pkg;_} =
-  sample ~retry ~log ~switch ~pkg
+let experiment ~retry ~log ~slices {Zipper.switch;pkg;_} =
+  sample ~retry ~log ~switch ~slices ~pkg
 
-let start ~n ~retry ~switches ~status_file ~log_name ~log ~context ~pkgs =
+let start ~n ~retry ~slices ~switches ~status_file ~log_name ~log ~context ~pkgs =
   let () = clean ~switches ~pkgs () in
-  let () = install_context ~retry:3 ~switches ~pkgs:context in
-  let z = Zipper.start ~retry ~log:log_name ~switches ~pkgs ~sample_size:n in
-  Zipper.tracked_iter ~status_file (experiment ~retry ~log) z
+  let () = install_context ~retry:3  ~switches ~pkgs:context in
+  let z = Zipper.start ~slices ~retry ~log:log_name ~switches ~pkgs ~sample_size:n in
+  Zipper.tracked_iter ~status_file (experiment ~slices ~retry ~log) z
 
 
 
@@ -127,12 +129,13 @@ let with_file_append filename f =
 let restart ~status_file  =
   let z = Zipper.t_of_yojson (Yojson.Safe.from_file status_file) in
   let switches = Zipper.switches z in
+  let slices = Zipper.slices z in
   let sampled = z.pkgs.sampled in
   let todo = z.pkgs.todo in
   let () = clean ~switches ~pkgs:todo () in
   let () = install_context ~retry:3 ~switches ~pkgs:sampled in
   with_file_append z.log (fun log ->
-      Zipper.tracked_iter ~status_file (experiment ~retry:z.retry ~log) z
+      Zipper.tracked_iter ~status_file (experiment ~slices ~retry:z.retry ~log) z
     )
 
 

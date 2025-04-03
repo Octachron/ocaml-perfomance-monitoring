@@ -104,7 +104,7 @@ let pp_summary ppf x =
 
 let print times =
   By_files.iter (fun {pkg;name} times ->
-      let mean = interval_average (List.map (fun x -> x.Data.typechecking) times) in
+      let mean = interval_average (List.map Data.typing times) in
       Fmt.pr "%s/%s:average:%a(%a)@." pkg name pretty_interval mean Fmt.(Dump.list Data.pp_times) times
     )   times
 
@@ -141,7 +141,8 @@ let save_raw name stat =
   let name ="raw_"^ name ^ ".data" in
   to_filename name (fun fmt -> By_files.iter (print_raw_entry name fmt) stat)
 
-module Slice0 = struct
+
+module SliceTy0 = struct
   type index = Ty | Nonty | Total | Ratio
   type 'a t = { ty:'a; nonty:'a; total:'a; ratio:'a}
   let dim _ = 4
@@ -155,16 +156,29 @@ module Slice0 = struct
   let to_seq x = Array.to_seq [|x.ty; x.nonty; x.total; x.ratio|]
 end
 
-module Slice = struct include Slice0 include Array_like.Expand(Slice0) end
+module SliceTy = struct
+  include SliceTy0
+  include Array_like.Expand(SliceTy0)
+  let gen =
+    let nonty =  List.map (fun x-> Data.total x -. Data.typing x) in
+    let ty = List.map Data.typing in
+    let total = List.map Data.total in
+    let ratio = List.map (fun x -> Data.typing x /. Data.total x) in
+    SliceTy0.{nonty;total;ratio;ty}
 
-let gen =
-  let nonty =  List.map (fun (x:Data.times) -> x.total -. x.typechecking) in
-  let ty = List.map (fun x -> x.Data.typechecking) in
-  let total = List.map (fun x -> x.Data.total) in
-  let ratio = List.map (fun x -> x.Data.typechecking/. x.total) in
-  Slice.{nonty;total;ratio;ty}
+  let main x = x.ty
 
+end
 
+type 'a printer = Format.formatter -> 'a -> unit
+
+module type slice = sig
+  type 'a t
+  val map: ('a -> 'b) -> 'a t -> 'b t
+  val gen: (Data.times list -> float list) t
+  val main: 'a t -> 'a
+  val pp: 'a printer -> 'a t printer
+end
 
 
 type ('r,'alts) balanced = { main:'alts; ref:'r }
@@ -176,11 +190,11 @@ let pp_balanced pp_ref pp_alts ppf x =
 let pp_full_key ppf (key:File_key.t) = Fmt.pf ppf "%s:%s" key.pkg key.name
 
 
-module Balanced(A:Array_like.t) = struct
+module Balanced(A:Array_like.t)(S:slice) = struct
   type 'a t = ('a, 'a A.t) balanced
   let map f { ref; main } = { main = A.map f main; ref = f ref }
 
-  type simplified = summary t Slice.t
+  type simplified = summary t S.t
 
   let simplify ref alts = By_files.fold (fun key ref_times m ->
       match A.map (By_files.find key) alts with
@@ -192,8 +206,8 @@ module Balanced(A:Array_like.t) = struct
         else
           let map_summary x f = map (fun x -> summarize (f x)) x in
           let data = { ref = ref_times; main = all_times } in
-          let data = Slice.map (map_summary data) gen in
-          if A.for_all ( fun x -> x.min > epsilon) data.ty.main  then
+          let data = S.map (map_summary data) S.gen in
+          if A.for_all ( fun x -> x.min > epsilon) (S.main data).main  then
             By_files.add key data m
           else
             m
@@ -205,7 +219,7 @@ module Balanced(A:Array_like.t) = struct
     let pp = pp_balanced pp_summary (A.pp pp_summary) in
     Fmt.pf fmt "@[<h>%a %a@]@."
       pp_key key
-      (Slice.pp pp) slice
+      (S.pp pp) slice
 
 
 let save filename m = to_filename filename (fun fmt ->

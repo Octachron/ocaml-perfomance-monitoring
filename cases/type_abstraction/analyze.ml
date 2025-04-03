@@ -14,8 +14,8 @@ module After = Array_like.Expanded(struct
 end)
 
 
-module Time_info = Stat.Balanced(After)
-module Gen = Timings.Generator(After)(Time_info)
+module Time_info = Stat.Balanced(After)(Stat.SliceTy)
+module Gen = Timings.Generator(After)(Stat.SliceTy)(Time_info)
 
 module P = Plot_projectors.Indexed(After)
 

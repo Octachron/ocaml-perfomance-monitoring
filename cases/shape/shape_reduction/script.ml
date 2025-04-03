@@ -22,6 +22,7 @@ let () =
   Runner.run
     ~n:1
     ~retry:3
+    ~slices:["typing"]
     ~switches:Alts.all
     ~context:(List.map (fun (x,y) -> Pkg.make x y) Total_trace.context)
     ~pkgs:Total_trace.pkgs

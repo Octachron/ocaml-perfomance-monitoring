@@ -16,9 +16,9 @@ end
 module Variants = Array_like.Expanded(V)
 module Vec_variants = Array_like.As_vec(Vec.Float)(Variants)
 
-module Time_info = Stat.Balanced(Variants)
+module Time_info = Stat.Balanced(Variants)(Stat.SliceTy)
 module Size_info = Time_info
-module Gen = Timings.Generator(Variants)(Time_info)
+module Gen = Timings.Generator(Variants)(Stat.SliceTy)(Time_info)
 
 module P = Plot_projectors.Indexed(Variants)
 

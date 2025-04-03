@@ -4,7 +4,18 @@ type metadata = { switch:string; pkg:string }
 type ('k,'v) point = { origin:metadata; key:'k; value:'v }
 
 type file = { pkg:string; name:string }
-type times = { typechecking: float; total: float }
+
+type time_slice = { name:string; time:float }
+
+let rec (.!()) l x = match l with
+  | [] -> raise Not_found
+  | a :: q  -> if a.name = x then a.time else q.!(x)
+
+let typing x = x.!("typing")
+let total = function
+  | [] -> raise Not_found
+  | h :: _ -> h.time
+type times = time_slice list
 
 type file_type =
   | Cmi
@@ -13,22 +24,33 @@ type file_type =
   | Cmt
   | Cmti
 
+
 type filesize = { kind:file_type; size:int }
 
-let typechecking_times ~switch ~pkg l  =
+let rec slice_child names children =
+  match names with
+  | [] -> []
+  | name :: rest ->
+    match List.find_opt (fun child -> child.Parse.name = name) children with
+    | None -> []
+    | Some child ->
+      { name; time=child.time } :: slice_child rest child.children
+
+
+let times ~slices ~switch ~pkg l  =
   let origin = { switch; pkg } in
-  let typechecking {Parse.name; time; children} =
-    match List.find_opt (fun child -> child.Parse.name = "typing") children with
-    | None -> { origin; key=name;  value = { typechecking=0.; total=time} }
-    | Some child -> { origin; key=name; value = { typechecking=child.time; total = time} }
+  let time_slice (parse:Parse.entry) =
+    let value = { time=parse.time; name = parse.name } :: slice_child slices parse.children in
+    { origin; key = parse.name; value }
   in
-  List.map typechecking l
+  List.map time_slice l
 
 
-let pp_times ppf {typechecking; total} =
-  Fmt.pf ppf "%.3gs/%.3gs" typechecking total
+let pp_slice ppf s = Fmt.pf ppf "%s %.3g" s.name s.time
 
-
+let pp_times ppf l =
+  let sep ppf () = Fmt.pf ppf " " in
+  Fmt.(list ~sep pp_slice) ppf l
 
 let file_type_extension = function
   | Cmi -> "cmi"
