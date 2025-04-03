@@ -11,25 +11,30 @@ let write_entry ppf = function
     Fmt.pf ppf filesize_fmt x.origin.switch x.origin.pkg x.key (Data.file_type_extension x.value.kind) x.value.size;
     Fmt.pf ppf "@."
 
-let parse_column s =
-  Scanf.sscanf s "%s:%f" (fun x time -> {Data.name=x; time})
+let parse_column (x,y) =
+  {Data.name=x; time = float_of_string y}
 
-let parse_columns s =
-  let s = String.split_on_char ' ' s in
-  try Some (List.map parse_column s) with Scanf.Scan_failure _ -> None
-
-let (let*?) x f = Option.bind x f
+let rec pair = function
+  | x :: y :: z -> (x,y) :: pair z
+  | [s] -> Format.eprintf "Parsing unpaired name: %s@."s ; exit 2
+  | [] -> []
 
 let parse_profile s =
-  let*? switch, pkg, c =
-    Scanf.sscanf_opt s profile_scan (fun s p c -> s,p,c) in
-  let*? value = parse_columns c in
-  match value with
-  | [] -> None
-  | h :: _ ->
-    Some Data.(
-        Compilation_profile { origin = {switch;pkg}; key=h.name; value}
-      )
+  let s = String.split_on_char ' ' s in
+  match s with
+  | "Profile" :: switch :: pkg :: (key :: t as rest) ->
+    begin match t with
+      | [] ->
+        Some Data.(
+            Compilation_profile { origin = {switch;pkg}; key; value=[]}
+          )
+      | _ ->
+        let value = List.map parse_column (pair rest) in
+        Some Data.(
+            Compilation_profile { origin = {switch;pkg}; key; value}
+          )
+    end
+  | _ -> None
 
 
 let scan_entry s =

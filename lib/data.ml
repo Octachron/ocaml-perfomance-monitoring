@@ -11,9 +11,11 @@ let rec (.!()) l x = match l with
   | [] -> raise Not_found
   | a :: q  -> if a.name = x then a.time else q.!(x)
 
-let typing x = x.!("typing")
+let (.?()) l x = try l.!(x) with Not_found -> 0.
+
+let typing x = x.?("typing")
 let total = function
-  | [] -> raise Not_found
+  | [] -> 0.
   | h :: _ -> h.time
 type times = time_slice list
 
