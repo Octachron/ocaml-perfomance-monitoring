@@ -1,0 +1,2 @@
+(executable (name script) (modules Script) (libraries runner))
+(executable (name analyze) (modules Analyze) (libraries analyzer))
