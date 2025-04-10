@@ -74,6 +74,14 @@ let read_result ~with_filesize ~build_dir ~slices ~switch ~pkg ~dir =
 
 let (<!>) = Cmds.(<!>)
 
+let rec rmr f =
+  if Sys.is_directory f then begin
+    Array.iter (fun x -> rmr (Filename.concat f x)) (Sys.readdir f);
+    Sys.rmdir f
+  end
+  else Sys.remove f
+
+
 let sample ~retry ~log ~slices ~with_filesize ~switch ~pkg =
   let dir = pkg_dir ~switch ~pkg in
   let () =  Sys.mkdir dir 0o777 in
@@ -81,7 +89,9 @@ let sample ~retry ~log ~slices ~with_filesize ~switch ~pkg =
   let build_dir = Cmds.opam_var ~switch ~pkg "build" in
   Seq.iter
     (Log.write_entry log)
-    (read_result ~with_filesize ~slices ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg))
+    (read_result ~with_filesize ~slices ~switch ~build_dir ~dir ~pkg:(Pkg.full pkg));
+  rmr dir
+
 
 let rec multisample n ~with_filesize ~retry ~log ~slices ~switch ~pkg =
   if n = 0 then () else

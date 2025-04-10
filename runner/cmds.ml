@@ -26,8 +26,10 @@ let install ~retry  ~switch ~pkgs =
     (fun () -> with_switch ~switch "opam install --no-depexts -b --yes %s" (String.concat " " @@ List.map Pkg.name pkgs))
 
 let opam_var ~switch ~pkg var =
-  let inp, _ = Unix.open_process (Format.asprintf "(%t && opam var %s:%s)" (set_switch switch) (Pkg.name pkg) var) in
-  input_line inp
+  let inp, out = Unix.open_process (Format.asprintf "(%t && opam var %s:%s)" (set_switch switch) (Pkg.name pkg) var) in
+  let r= input_line inp in
+  In_channel.close inp; Out_channel.close out;
+  r
 
 
 let execute ~retry ~dir ~switch ~pkg =
