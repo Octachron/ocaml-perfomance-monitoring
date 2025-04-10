@@ -37,9 +37,9 @@ let hard =
 "zed", "3.2.3";
 "lambda-term", "3.3.2";
 "utop", "2.15.0-1";
- "seq", "base";
-  "re", "1.12.0";
-  "tyxml", "4.6.0";
+"seq", "base";
+"re", "1.12.0";
+"tyxml", "4.6.0";
 "fieldslib","v0.17.0";
 "jane-street-headers","v0.17.0";
 "ppx_derivers","1.2.1";
@@ -104,12 +104,12 @@ let hard =
 
 ]
 let () = Runner.run
- ~log:"occur_rec.log"
- ~n:3
+ ~log:"cases/occur_rec/logs/log4"
+ ~n:100
  ~slices:["typing"; "occur_rec"]
  ~retry:3
  ~with_filesize:false
  ~switches:[before;after]
  ~context:[]
  ~pkgs:hard
- ~status_file:"occur_rec.status"
+ ~status_file:"cases/occur_rec/status/run4"
